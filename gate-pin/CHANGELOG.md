@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.0] - 2026-08-28
+- Re-issue a credential for an existing grant; document installing the panel to a home screen
+
 ## [0.3.0] - 2026-08-28
 - Telegram buttons: /menu mints from a preset in one tap, with Revoke and +1 hour on the reply
 
