@@ -1,86 +1,67 @@
 # Installing Gate PIN on Home Assistant
 
-Two ways in. Start with the local folder — it needs no git remote, no decisions,
-and it is the fastest way to find out whether the five things that can only be
-tested on a real install actually work.
+Home Assistant OS on Proxmox, repository kept private. That combination means
+the **local add-on folder** is the route: Supervisor clones add-on repositories
+anonymously, so a private GitHub repo cannot be added to the store at all.
+
+Nothing is published and no git remote is needed. Building on an x86 VM takes
+2–4 minutes.
 
 ---
 
-## Path A — local add-on folder (start here)
+## Install
 
-Supervisor picks up any add-on placed in `/addons` on the Home Assistant machine
-and offers it under **Local add-ons**. Nothing is published, nothing is public.
+**1. Get write access to `/addons`.** Either:
 
-**1. Get a way to write to `/addons`.** Any one of:
+- **Samba share** add-on — then in Finder, Go → Connect to Server →
+  `smb://homeassistant.local`, and mount `addons`
+- **Advanced SSH & Web Terminal** add-on — then deploy over SSH
 
-- **Samba share** add-on — mounts `\\homeassistant\addons` from your Mac's Finder
-  (Go → Connect to Server → `smb://homeassistant.local`)
-- **Advanced SSH & Web Terminal** add-on — then `scp` into it
-- **Studio Code Server** add-on — edit in place
-
-**2. Copy the add-on folder** — just `gate-pin/`, not the whole repo:
+**2. Deploy:**
 
 ```bash
-# with the Samba add-on mounted
-cp -R gate-pin /Volumes/addons/gate-pin
-
-# or over SSH
-scp -r gate-pin root@homeassistant.local:/addons/
+./gate-pin/scripts/deploy.sh /Volumes/addons           # mounted Samba share
+./gate-pin/scripts/deploy.sh root@homeassistant.local  # SSH add-on
 ```
 
-Do not copy `gate-pin/frontend/node_modules` or `gate-pin/frontend/dist` — they
-are gitignored and the container builds them itself.
+It copies `gate-pin/` and nothing else — `node_modules` and `dist` are excluded,
+because the container builds the frontend itself and host-built artefacts would
+poison the image. About 620 KB goes across.
 
 **3. Settings → Add-ons → Add-on store → ⋯ → Check for updates.**
 Gate PIN appears under **Local add-ons**. Install it.
 
-The first install **builds the image on your Home Assistant machine**, including
-a Node stage that compiles the React bundles. See *Build time* below.
+The first install runs `docker build` on the Proxmox VM: a Node stage compiling
+the React bundles, then a Python stage. Two to four minutes, then mostly cached.
 
-**4. Configure it** before starting — at minimum `external_base_url`.
-Then start it, and the panel appears in the sidebar.
+**4. Configure before starting.** At minimum `external_base_url` — the public URL
+your tunnel will serve. Then start it; the panel appears in the sidebar.
 
----
+## Updating
 
-## Path B — a git repository
+```bash
+./gate-pin/scripts/deploy.sh /Volumes/addons
+```
 
-Once it works locally, a repository makes updates a click instead of a copy.
-
-**1. Push this repo to GitHub.** `repository.json` at the root is what makes it
-an add-on repository, and its `url` must match the real remote.
-
-**2. Settings → Add-ons → Add-on store → ⋯ → Repositories**, paste the repo URL,
-add. Gate PIN appears as its own card.
-
-**3. Updates** are then: push a commit that bumps `version:` in
-`gate-pin/config.yaml`, and Home Assistant offers the update.
-
-**The repository must be reachable without credentials.** Supervisor clones it
-anonymously — a private GitHub repo will fail to add. If you want it private,
-stay on Path A.
+Then open the add-on in Home Assistant and click **Rebuild**. Bumping `version:`
+in `gate-pin/config.yaml` also makes Home Assistant offer it as an update.
 
 ---
 
-## Build time, and whether your hardware can do it
+## If you later make the repository public
 
-Neither path pulls a prebuilt image. Supervisor runs `docker build` from
-`gate-pin/Dockerfile` on the Home Assistant machine, and that includes:
+The add-on store route becomes available and updates become a click rather than
+a deploy:
 
-- a Node stage: `npm install` (~200 packages) then two Vite builds
-- a Python stage: `pip install` of FastAPI, Pydantic, httpx
+1. `repository.json` at the repo root is what makes it an add-on repository —
+   set its `url` to the real remote first.
+2. Settings → Add-ons → Add-on store → ⋯ → Repositories → paste the URL.
+3. Push a commit that bumps `version:` and Home Assistant offers the update.
 
-| Hardware | Expectation |
-|---|---|
-| Intel/AMD mini PC, NUC, VM | 2–4 minutes. Fine. |
-| Raspberry Pi 5, 8 GB | 5–10 minutes. Fine. |
-| Raspberry Pi 4, 4 GB | 10–20 minutes. Works, but slow. |
-| Raspberry Pi 3, or 2 GB or less | Likely to fail — the Node stage is the problem. |
-
-You need roughly **1.5 GB of free disk** during the build.
-
-If your hardware cannot do it, the answer is to build images in CI and publish
-them, then point `config.yaml` at them with an `image:` key — installs become a
-pull instead of a build. Ask and I will set that up.
+Before doing that, note the real hostname still appears in `docs/plans/` and
+`_build_plan/` (the shipped add-on defaults were already neutralised). Worth
+scrubbing, since a public repo stating that a particular hostname opens a gate
+is a signpost.
 
 ---
 
