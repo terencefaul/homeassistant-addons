@@ -37,6 +37,8 @@ repository.json         names this repository to Home Assistant
 scripts/                repo-level tooling, takes an add-on name
   deploy.sh             copy an add-on to /addons and rebuild it
   release.sh            bump an add-on's version, changelog, commit, push
+  ha-status.sh          force Home Assistant to re-read the repository, and
+                        report installed vs available versions
 docs/plans/             design records, one per add-on
 gate-pin/               an add-on: config.yaml, Dockerfile, and its build context
 ```

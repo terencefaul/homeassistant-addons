@@ -131,6 +131,7 @@ Then three worth doing once the tunnel is live:
 | Bot shows as stopped in Health | Token wrong, or a second copy of the add-on is polling the same token. Telegram refuses both. |
 | Everyone gets rate-limited at once | `trusted_proxy_cidr` is wrong, so every visitor shares the tunnel's address. |
 | A code "isn't recognised" that should work | Check the audit log. A scheduled grant says *isn't active yet*; an expired one says *expired*. Those are different messages on purpose. |
+| A new version is published but no Update button appears | Supervisor caches its clone of the repository. **Add-on store → ⋮ → Check for updates**. If it still does not appear, the add-on may have been installed from `/addons` rather than the repository — those are different add-ons to Supervisor and a local one never shows updates. |
 
 ## Reporting problems
 
