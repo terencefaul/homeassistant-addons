@@ -2,7 +2,7 @@ name: Gate PIN
 version: "0.1.0"
 slug: gate_pin
 description: Time-limited guest access to chosen Home Assistant entities via a PIN or a link
-url: https://github.com/terencefaul/ha_pin
+url: https://github.com/terencefaul/homeassistant-addons
 arch:
   - aarch64
   - amd64

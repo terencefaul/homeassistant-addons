@@ -1,5 +1,8 @@
 # Gate PIN
 
+Published as a Home Assistant add-on repository at
+https://github.com/terencefaul/homeassistant-addons
+
 A Home Assistant add-on giving visitors time-limited access to chosen entities via a PIN or a tokenised link.
 
 ## Where the design lives
