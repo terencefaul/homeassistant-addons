@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.2.0] - 2026-08-28
+- Show the Cloudflare Tunnel service URL in the admin panel, with a copy button
+
 ## [0.1.3] - 2026-08-28
 - Document routing a second hostname on an existing Cloudflare tunnel
 
