@@ -25,7 +25,7 @@ else.
 Built for a driveway gate, but nothing in it is gate-specific: covers, locks,
 lights, switches, scenes and scripts are all supported.
 
-[Full documentation →](gate-pin/README.md) · [Install guide →](INSTALL.md)
+[Documentation →](gate-pin/DOCS.md) · [Overview and development →](gate-pin/README.md)
 
 ## Repository layout
 

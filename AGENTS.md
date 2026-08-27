@@ -12,12 +12,17 @@ must live inside it. Nothing outside the folder is available at build time.
 ```
 repository.json      names this repository to Home Assistant
 README.md            landing page, lists the add-ons
-INSTALL.md           how to install and update
 scripts/             repo-level tooling; every script takes an add-on name
 docs/plans/          design records, one per add-on -- durable
 _build_plan/         PRD and milestone prompts -- temporary, see below
 gate-pin/            an add-on
+  DOCS.md            rendered by Supervisor as the add-on's Documentation tab
+  README.md          the GitHub-facing view; not shown anywhere in Home Assistant
 ```
+
+Operator-facing documentation belongs in the add-on's `DOCS.md`. That is the
+only one users see from inside Home Assistant, at the moment they are looking
+at the configuration screen.
 
 Adding an add-on means adding one folder with a `config.yaml`. `scripts/` and
 the CI workflow discover add-ons by globbing for it, so nothing at the root
