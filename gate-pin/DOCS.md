@@ -50,8 +50,9 @@ bypass the proxy and forge the header — while every test you run still passes.
    Or, if you manage routes in the Cloudflare dashboard, add a public hostname
    with service type HTTP and URL `http://<gate-pin-hostname>:8888`.
 
-   `<gate-pin-hostname>` is assigned by Supervisor and shown on this add-on's
-   Info tab. It is not guessable — do not invent it.
+   `<gate-pin-hostname>` is assigned by Supervisor. **This add-on's panel prints
+   the exact URL for you** — open it and look at **Settings → Point your tunnel
+   here**, which has a copy button. It is not guessable, so do not invent it.
 
    **Do not route 8099** — that is the admin panel, and Home Assistant already
    protects it through ingress. Routing it would put your admin interface on the

@@ -282,6 +282,18 @@ def test_camera_snapshot_is_admin_only(ctx):
     assert client.get("/api/admin/camera/cover.driveway/snapshot", headers=INGRESS).status_code == 400
 
 
+def test_health_reports_where_a_tunnel_should_point(ctx):
+    """The hostname Supervisor assigns cannot be worked out from outside and
+    differs between a repository install and a local one. Guessing it is the
+    single most likely setup mistake, so the panel states it."""
+    client, _, _ = ctx
+    origin = client.get("/api/admin/health", headers=INGRESS).json()["tunnel_origin"]
+    assert origin["url"].startswith("http://")
+    assert origin["url"].endswith(":8888")
+    assert origin["hostname"]
+    assert origin["source"] in ("supervisor", "container hostname")
+
+
 def test_mint_from_preset(ctx):
     client, store, _ = ctx
     store.upsert_preset(preset_id="p1", name="plumber", entities=["cover.driveway"],

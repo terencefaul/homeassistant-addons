@@ -24,6 +24,7 @@ from gate_pin.credentials import generate_id
 from gate_pin.ha import HAError
 from gate_pin.store import Grant
 
+from . import supervisor
 from .deps import deps, require_ingress
 from .schemas import (
     BrandingRequest,
@@ -309,6 +310,10 @@ async def health(request: Request):
         ha_detail = str(exc)[:200]
     return {
         "home_assistant": {"ok": ha_ok, "detail": ha_detail},
+        # What a tunnel must point at. Supervisor assigns this and it differs
+        # between a repository install and a local one, so it is shown here
+        # rather than left for the operator to guess.
+        "tunnel_origin": await supervisor.tunnel_origin(),
         # A silently dead bot is discovered when someone is standing at the
         # gate, so it has to be visible here.
         "telegram": d.bot_status,

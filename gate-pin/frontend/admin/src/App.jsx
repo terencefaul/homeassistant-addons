@@ -418,6 +418,7 @@ function AuditTab({ setError }) {
 function SettingsTab({ setError }) {
   const [branding, setBranding] = useState(null)
   const [health, setHealth] = useState(null)
+  const [copiedOrigin, setCopiedOrigin] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -467,6 +468,35 @@ function SettingsTab({ setError }) {
           try { await api.saveBranding({ accent: branding.accent, default_theme: branding.default_theme }) }
           catch (e) { setError(e.message) }
         }}>Save branding</Button>
+      </Card>
+
+      <Card className="border-emerald-500/30">
+        <h3 className="font-medium mb-1">Point your tunnel here</h3>
+        <p className="text-xs text-zinc-500 mb-4">
+          Supervisor assigns this hostname and it is not guessable. Use it as the
+          service URL for the public hostname on your Cloudflare Tunnel.
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            readOnly
+            value={health.tunnel_origin?.url || ''}
+            onFocus={(e) => e.target.select()}
+            onClick={(e) => e.target.select()}
+            className="flex-1 min-w-0 rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 text-sm font-mono text-emerald-300"
+          />
+          <Button variant="ghost" onClick={async () => {
+            const ok = await writeToClipboard(health.tunnel_origin?.url || '')
+            setCopiedOrigin(ok ? 'Copied' : 'Select it')
+            setTimeout(() => setCopiedOrigin(''), ok ? 1500 : 4000)
+          }}>
+            {copiedOrigin || 'Copy'}
+          </Button>
+        </div>
+        <p className="text-xs text-zinc-500 mt-3">
+          Do not route port 8099 — that is this panel, and Home Assistant already
+          protects it. Leave 8888 unmapped in Network settings so it never binds
+          on the host.
+        </p>
       </Card>
 
       <Card>

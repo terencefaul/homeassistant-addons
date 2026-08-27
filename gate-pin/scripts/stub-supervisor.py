@@ -72,6 +72,12 @@ class Handler(BaseHTTPRequestHandler):
         p = self.path
         if p == "/_calls":
             return self._json(200, CALLS)
+        if p == "/addons/self/info":
+            # Supervisor tells an add-on its own hostname. That value is what a
+            # tunnel must target, and it is not derivable from outside.
+            return self._json(200, {"result": "ok", "data": {
+                "slug": "gate_pin", "hostname": "stub-gate-pin", "state": "started",
+            }})
         if p == "/core/api/states":
             return self._json(200, [{"entity_id": k, **v} for k, v in STATES.items()])
         if p.startswith("/core/api/states/"):
