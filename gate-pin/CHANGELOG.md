@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.2.2] - 2026-08-28
+- Document the telegram_chat_ids list syntax
+
 ## [0.2.1] - 2026-08-28
 - Show the tunnel URL first in Settings
 
