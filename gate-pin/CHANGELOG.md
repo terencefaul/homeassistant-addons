@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.1.2] - 2026-08-28
+- Document the Cloudflare Tunnel requirement and how to verify it
+
 ## [0.1.1] - 2026-08-27
 - Fix guest page assets failing to load from a /g/<token> link, and the Copy button silently doing nothing over plain HTTP
 
