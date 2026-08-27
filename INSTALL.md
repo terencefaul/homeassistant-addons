@@ -1,43 +1,55 @@
 # Installing Gate PIN on Home Assistant
 
-Home Assistant OS on Proxmox, repository kept private. That combination means
-the **local add-on folder** is the route: Supervisor clones add-on repositories
-anonymously, so a private GitHub repo cannot be added to the store at all.
+Published as an add-on repository at
+**https://github.com/terencefaul/homeassistant-addons**
 
-Nothing is published and no git remote is needed. Building on an x86 VM takes
-2–4 minutes.
+Home Assistant OS on Proxmox builds this in two to four minutes.
 
 ---
 
 ## Install
 
-**1. Get write access to `/addons`.** Either:
+**1. Settings -> Add-ons -> Add-on store -> ... (top right) -> Repositories.**
+Paste:
 
-- **Samba share** add-on — then in Finder, Go → Connect to Server →
-  `smb://homeassistant.local`, and mount `addons`
-- **Advanced SSH & Web Terminal** add-on — then deploy over SSH
-
-**2. Deploy:**
-
-```bash
-./gate-pin/scripts/deploy.sh /Volumes/addons           # mounted Samba share
-./gate-pin/scripts/deploy.sh root@homeassistant.local  # SSH add-on
+```
+https://github.com/terencefaul/homeassistant-addons
 ```
 
-It copies `gate-pin/` and nothing else — `node_modules` and `dist` are excluded,
-because the container builds the frontend itself and host-built artefacts would
-poison the image. About 620 KB goes across.
+Add, then close. A **Terica Home Assistant add-ons** section appears with a
+**Gate PIN** card.
 
-**3. Settings → Add-ons → Add-on store → ⋯ → Check for updates.**
-Gate PIN appears under **Local add-ons**. Install it.
+**2. Install it.** The first install runs `docker build` on the Proxmox VM: a
+Node stage compiling the React bundles, then a Python stage. Two to four
+minutes, then mostly cached.
 
-The first install runs `docker build` on the Proxmox VM: a Node stage compiling
-the React bundles, then a Python stage. Two to four minutes, then mostly cached.
+**3. Configure before starting.** At minimum `external_base_url` — the public
+URL your tunnel will serve. Then start it; the panel appears in the sidebar.
 
-**4. Configure before starting.** At minimum `external_base_url` — the public URL
-your tunnel will serve. Then start it; the panel appears in the sidebar.
+---
 
-## Updating — one command
+## Updating
+
+From your working copy:
+
+```bash
+./gate-pin/scripts/release.sh patch "What changed"
+```
+
+That bumps `version:` in `config.yaml`, writes a CHANGELOG entry, commits and
+pushes. Home Assistant compares that version against the installed one, so the
+bump *is* the update mechanism — nothing else is needed.
+
+In Home Assistant: **Add-on store -> ... -> Check for updates**, and the Gate
+PIN card offers an **Update** button.
+
+`minor` and `major` work too, as does an explicit `0.3.0`.
+
+---
+
+## Working on it without releasing
+
+For iterating, skip the repository entirely and push straight to `/addons`:
 
 ```bash
 export HA_URL=http://homeassistant.local:8123
@@ -47,34 +59,17 @@ export HA_TOKEN=...    # Profile > Security > Long-lived access tokens
 ```
 
 That copies the changed files and rebuilds and restarts the add-on through the
-Home Assistant API. Nothing to click. Home Assistant proxies the Supervisor API
-at `/api/hassio` for admins, so it works from anywhere that can reach Home
-Assistant.
+Home Assistant API, with nothing to click and no commit. It installs as a
+**Local add-on**, separate from the store copy — run one or the other, not both.
 
-Put those two exports in a `.env` you do not commit — the token is equivalent to
+Put those exports in a `.env`; it is gitignored, and the token is equivalent to
 your Home Assistant login.
 
-Without `--rebuild` it just copies, and you click **Rebuild** on the add-on page
-yourself.
+Requires the **Samba share** add-on (Finder -> Go -> Connect to Server ->
+`smb://homeassistant.local`) or the **Advanced SSH & Web Terminal** add-on.
 
 ---
 
-## If you later make the repository public
-
-The add-on store route becomes available and updates become a click rather than
-a deploy:
-
-1. `repository.json` at the repo root is what makes it an add-on repository —
-   set its `url` to the real remote first.
-2. Settings → Add-ons → Add-on store → ⋯ → Repositories → paste the URL.
-3. Push a commit that bumps `version:` and Home Assistant offers the update.
-
-Before doing that, note the real hostname still appears in `docs/plans/` and
-`_build_plan/` (the shipped add-on defaults were already neutralised). Worth
-scrubbing, since a public repo stating that a particular hostname opens a gate
-is a signpost.
-
----
 
 ## Before you start it
 
