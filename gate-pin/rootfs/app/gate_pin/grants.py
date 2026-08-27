@@ -159,3 +159,57 @@ def redeem(store: Store, presented: str) -> Redemption:
     if status == "expired":
         return Redemption(OUTCOME_EXPIRED, grant, kind)
     return Redemption(OUTCOME_OK, grant, kind)
+
+
+def reissue(
+    store: Store,
+    grant_id: str,
+    *,
+    kinds: Iterable[str],
+    pin_length: int = 6,
+    max_live_pin_grants: int = 20,
+) -> MintResult:
+    """Issue a fresh credential for a grant that already exists.
+
+    Needed because a credential is unrecoverable by design: only its keyed hash
+    is kept, so there is no "show it again". Re-issuing keeps the grant -- same
+    window, same entities, same single revocation -- and changes only the key.
+    """
+    kinds = tuple(dict.fromkeys(kinds))
+    if not kinds:
+        raise MintError("choose at least one of PIN or link")
+    for k in kinds:
+        if k not in KINDS:
+            raise MintError(f"unknown credential kind: {k}")
+
+    grant = store.get_grant(grant_id)
+    if grant is None:
+        raise MintError("no such grant")
+    if grant.status() == "revoked":
+        raise MintError("that grant was revoked; mint a new one")
+    if grant.status() == "expired":
+        raise MintError("that grant has expired; mint a new one")
+
+    # Adding a PIN to a grant that had none makes it count against the cap.
+    if "pin" in kinds and "pin" not in grant.kinds:
+        live = store.live_pin_grant_count()
+        if live >= max_live_pin_grants:
+            raise MintError(
+                f"already {live} live PIN grants (cap {max_live_pin_grants}). "
+                "Re-issue the link instead, or revoke one first."
+            )
+
+    pin = token = None
+    creds: list[tuple[str, str]] = []
+    if "pin" in kinds:
+        pin = _unique(store, lambda: generate_pin(pin_length))
+        creds.append(("pin", pin))
+    if "token" in kinds:
+        token = _unique(store, generate_token)
+        creds.append(("token", token))
+
+    store.replace_credentials(grant_id, creds)
+    store.log("reissue", grant_id=grant_id, detail=",".join(kinds))
+    refreshed = store.get_grant(grant_id)
+    assert refreshed is not None
+    return MintResult(grant=refreshed, pin=pin, token=token)

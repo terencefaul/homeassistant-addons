@@ -32,6 +32,7 @@ from .schemas import (
     MintFromPresetRequest,
     MintRequest,
     PresetRequest,
+    ReissueRequest,
 )
 
 router = APIRouter(
@@ -186,6 +187,35 @@ async def extend(grant_id: str, body: ExtendRequest, request: Request):
         d.store.log, "extend", grant_id=grant_id, detail=f"+{body.additional_s}s"
     )
     return {"ok": True, "valid_until": new_until}
+
+
+@router.post("/grants/{grant_id}/reissue")
+async def reissue(grant_id: str, body: ReissueRequest, request: Request):
+    """Issue a fresh credential for an existing grant.
+
+    A credential cannot be shown twice -- only its keyed hash is stored -- so
+    re-sending means issuing another key to the same lock. The grant keeps its
+    window, entities and single revocation.
+    """
+    d = deps(request)
+    try:
+        result = await asyncio.to_thread(
+            g.reissue,
+            d.store,
+            grant_id,
+            kinds=body.kinds,
+            pin_length=d.options.pin_length,
+            max_live_pin_grants=d.options.max_live_pin_grants,
+        )
+    except g.MintError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {
+        "grant": _grant_json(result.grant),
+        "pin": result.pin,
+        "link": result.link(d.options.external_base_url),
+        "live_pin_grants": await asyncio.to_thread(d.store.live_pin_grant_count),
+        "pin_cap": d.options.max_live_pin_grants,
+    }
 
 
 @router.get("/presets")

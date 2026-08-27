@@ -148,7 +148,13 @@ and one large button each. When the window closes, both credentials stop working
 ## Things worth understanding
 
 **Credentials are shown once.** Only a keyed hash is stored, so no screen and no
-endpoint can show a code again. Lose it and re-mint. This is deliberate.
+endpoint can show a code again — not even to you. This is deliberate.
+
+To send one again, use **New PIN** or **New link** on the grant in the Grants
+tab. That issues a fresh key to the *same* grant: same window, same entities,
+still one revocation. The previous key of that kind stops working, which is the
+safer default — you are re-issuing because the first one did not arrive, and a
+credential that went astray should not stay live.
 
 **A credential is a bearer token.** It works for anyone holding it until it
 expires. There is no use counting — time is the only control. Keep windows
@@ -168,6 +174,24 @@ still let someone in during an attack.
 the panel, but it is never rendered on the public guest page.
 
 **If the tunnel or Home Assistant is down, nobody gets in.** Keep a physical key.
+
+## Putting the panel on your phone
+
+The admin panel is a progressive web app, so it installs to a home screen. There
+is nothing to enable — it is built in.
+
+- **iPhone:** open Home Assistant in Safari, go to the Gate PIN panel, then
+  Share → **Add to Home Screen**.
+- **Android:** Chrome menu → **Install app**.
+
+Two honest caveats. The panel lives behind Home Assistant ingress, so it needs
+an authenticated Home Assistant session in that browser — if you are logged out,
+you get Home Assistant's login screen. And the ingress path can change, which
+would leave the installed icon pointing somewhere stale; re-add it if that
+happens.
+
+For day-to-day use the Telegram bot is the better phone interface, which is why
+`/menu` exists. The panel is where you set things up.
 
 ## Checking the install
 

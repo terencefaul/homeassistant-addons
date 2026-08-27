@@ -194,8 +194,18 @@ function MintTab({ entities, presets, onMinted, setError }) {
 
 function GrantsTab({ data, reload, setError }) {
   const [busy, setBusy] = useState(null)
+  const [reissued, setReissued] = useState(null)
   if (!data) return <p className="text-zinc-500">Loading…</p>
   const now = data.now
+
+  /* A credential cannot be shown twice — only its keyed hash is stored — so
+     "send it again" issues a fresh key to the same grant. Same window, same
+     entities, same single revocation. The previous key of that kind stops
+     working, which is the safer default: you are re-issuing because the first
+     one did not arrive. */
+  if (reissued) {
+    return <MintResult result={reissued} onDone={() => { setReissued(null); reload() }} />
+  }
 
   async function run(id, fn) {
     setBusy(id); setError(null)
@@ -231,6 +241,21 @@ function GrantsTab({ data, reload, setError }) {
               <Button variant="ghost" disabled={busy === g.id} onClick={() => run(g.id, () => api.extend(g.id, 14400))}>+4 hours</Button>
             </>
           )}
+          {['active', 'scheduled'].includes(g.status) && g.kinds.map((kind) => (
+            <Button
+              key={kind}
+              variant="ghost"
+              disabled={busy === g.id}
+              title={`Issue a new ${kind === 'pin' ? 'PIN' : 'link'} for this grant. The current one stops working.`}
+              onClick={async () => {
+                setBusy(g.id); setError(null)
+                try { setReissued(await api.reissue(g.id, [kind])) }
+                catch (e) { setError(e.message) } finally { setBusy(null) }
+              }}
+            >
+              New {kind === 'pin' ? 'PIN' : 'link'}
+            </Button>
+          ))}
           <Button variant="danger" disabled={busy === g.id} onClick={() => run(g.id, () => api.revoke(g.id))}>Revoke</Button>
         </div>
       )}

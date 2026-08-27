@@ -59,6 +59,10 @@ class ExtendRequest(Strict):
     additional_s: int = Field(ge=60, le=60 * 60 * 24 * 30)
 
 
+class ReissueRequest(Strict):
+    kinds: list[Kind] = Field(min_length=1, max_length=2)
+
+
 class PresetRequest(Strict):
     id: Optional[str] = None
     name: str = Field(min_length=1, max_length=60)

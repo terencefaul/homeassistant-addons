@@ -91,6 +91,7 @@ EVENTS = (
     "mint",
     "revoke",
     "extend",
+    "reissue",
     "lockout",
 )
 
@@ -320,6 +321,37 @@ class Store:
                 (grant_id, entity_id),
             )
         )
+
+    def replace_credentials(
+        self, grant_id: str, credentials: Iterable[tuple[str, str]]
+    ) -> None:
+        """Issue fresh credentials for an existing grant, replacing those kinds.
+
+        A credential cannot be recovered -- only its keyed hash is stored -- so
+        "send it again" has to mean "issue another key to the same lock". The
+        grant keeps its window, its entity list and its single revocation; only
+        the key changes.
+
+        Replacing rather than adding is the safer default: you re-issue because
+        the first one did not arrive, and a credential that went astray should
+        not stay live.
+        """
+        with self._lock:
+            try:
+                self._db.execute("BEGIN IMMEDIATE")
+                for kind, plaintext in credentials:
+                    self._db.execute(
+                        "DELETE FROM credentials WHERE grant_id=? AND kind=?",
+                        (grant_id, kind),
+                    )
+                    self._db.execute(
+                        "INSERT INTO credentials (hmac,grant_id,kind) VALUES (?,?,?)",
+                        (self.fingerprint(plaintext), grant_id, kind),
+                    )
+                self._db.commit()
+            except Exception:
+                self._db.rollback()
+                raise
 
     # ---- presets --------------------------------------------------------
 

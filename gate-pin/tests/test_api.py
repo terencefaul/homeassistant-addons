@@ -294,6 +294,48 @@ def test_health_reports_where_a_tunnel_should_point(ctx):
     assert origin["source"] in ("supervisor", "container hostname")
 
 
+def test_reissue_gives_a_new_credential_and_kills_the_old_one(ctx):
+    """"Send it again" cannot mean "show it again" -- only the keyed hash is
+    stored. It means issuing another key to the same lock."""
+    client, store, _ = ctx
+    r = mint(store, kinds=("pin", "token"))
+    old_pin, old_token, gid = r.pin, r.token, r.grant.id
+
+    body = client.post(f"/api/admin/grants/{gid}/reissue", headers=INGRESS,
+                       json={"kinds": ["token"]}).json()
+    assert body["link"] and body["grant"]["id"] == gid
+
+    new_token = body["link"].rsplit("/", 1)[-1]
+    assert new_token != old_token
+    # Same grant: same window, same entities, one revocation.
+    assert body["grant"]["entities"] == list(r.grant.entities)
+    assert body["grant"]["valid_until"] == r.grant.valid_until
+
+    assert client.post("/api/guest/redeem", json={"credential": new_token}, headers=CF).status_code == 200
+    assert client.post("/api/guest/redeem", json={"credential": old_token}, headers=CF).status_code == 401
+    # The PIN was not re-issued, so it must be untouched.
+    assert client.post("/api/guest/redeem", json={"credential": old_pin}, headers=CF).status_code == 200
+
+
+def test_reissue_refuses_a_grant_that_is_no_longer_live(ctx):
+    client, store, _ = ctx
+    r = mint(store)
+    store.revoke_grant(r.grant.id)
+    resp = client.post(f"/api/admin/grants/{r.grant.id}/reissue", headers=INGRESS,
+                       json={"kinds": ["token"]})
+    assert resp.status_code == 409
+    assert "mint a new one" in resp.json()["detail"]
+
+
+def test_reissue_revocation_still_kills_every_credential(ctx):
+    client, store, _ = ctx
+    r = mint(store)
+    body = client.post(f"/api/admin/grants/{r.grant.id}/reissue", headers=INGRESS,
+                       json={"kinds": ["pin", "token"]}).json()
+    store.revoke_grant(r.grant.id)
+    assert client.post("/api/guest/redeem", json={"credential": body["pin"]}, headers=CF).status_code == 401
+
+
 def test_mint_from_preset(ctx):
     client, store, _ = ctx
     store.upsert_preset(preset_id="p1", name="plumber", entities=["cover.driveway"],
