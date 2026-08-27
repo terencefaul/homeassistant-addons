@@ -76,6 +76,23 @@ on your other hostnames is fine — just not this one.
 nothing else, so it is proof the request reached the add-on rather than your
 router, an old DNS record, or another proxy.
 
+**The chat IDs are a list.** A bare number is rejected with *"Invalid list for
+option 'telegram_chat_ids'"*. In YAML mode:
+
+```yaml
+telegram_bot_token: "1234567890:AA..."
+telegram_chat_ids:
+  - 1590213344
+```
+
+Note the `- ` and the indent. In the visual editor, use the **＋** to add an
+entry. It is a list so you can let more than one person mint.
+
+**If you ever paste a token somewhere it should not be**, `@BotFather` →
+`/revoke` issues a new one. The old token does not let anyone mint — that needs
+a chat ID on the allowlist — but it does let them send messages as your bot and
+seize the polling slot, which breaks minting.
+
 ### 3. Configure and start
 
 Set `external_base_url` to the public URL from step 2 — it is what link
@@ -88,7 +105,7 @@ sidebar.
 |---|---|---|
 | `external_base_url` | `https://gate.example.com` | Your public URL. Link credentials are built from it, so a wrong value produces links that go nowhere. |
 | `telegram_bot_token` | empty | From `@BotFather`. Empty disables the bot entirely. |
-| `telegram_chat_ids` | empty | Numeric chat IDs allowed to command the bot. Anything else is ignored silently. |
+| `telegram_chat_ids` | empty | Numeric chat IDs allowed to command the bot. **A list, even for one person** — see below. Anything else is ignored silently. |
 | `notify_service` | empty | e.g. `notify.mobile_app_your_phone`. Where lockout and bot-failure alerts go. Falls back to a persistent notification. |
 | `pin_length` | `6` | 6–10 digits. Longer is safer and harder to read out over a phone. |
 | `max_live_pin_grants` | `20` | Cap on concurrent live PIN grants. See *Why the PIN cap exists*. |
