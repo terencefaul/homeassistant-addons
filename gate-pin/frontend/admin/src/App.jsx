@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import * as api from './api.js'
 import EntityPicker from './EntityPicker.jsx'
+import { writeToClipboard } from './clipboard.js'
 import QrCode from './QrCode.jsx'
 import { Button, Card, Field, Pill, STATUS_TONE, clock, input, relative } from './ui.jsx'
 
@@ -24,11 +25,15 @@ function Banner({ error, onClose }) {
    again -- there is deliberately no "show me the code again". */
 function MintResult({ result, onDone }) {
   const [copied, setCopied] = useState('')
-  const copy = (text, what) => {
-    navigator.clipboard?.writeText(text).then(() => {
-      setCopied(what)
-      setTimeout(() => setCopied(''), 1500)
-    })
+
+  /* navigator.clipboard exists only in a secure context. Home Assistant
+     ingress is usually plain HTTP on a LAN hostname, so it is undefined here
+     and the previous `navigator.clipboard?.writeText(...)` silently did
+     nothing -- the button appeared to work and copied nothing. */
+  const copy = async (text, what) => {
+    const ok = await writeToClipboard(text)
+    setCopied(ok ? what : `${what}-failed`)
+    setTimeout(() => setCopied(''), ok ? 1500 : 4000)
   }
   return (
     <Card className="border-emerald-500/40">
@@ -44,7 +49,7 @@ function MintResult({ result, onDone }) {
           <div className="flex items-center gap-3">
             <p className="font-mono text-4xl tracking-[0.3em] text-emerald-400">{result.pin}</p>
             <Button variant="ghost" onClick={() => copy(result.pin, 'pin')}>
-              {copied === 'pin' ? 'Copied' : 'Copy'}
+              {copied === 'pin' ? 'Copied' : copied === 'pin-failed' ? 'Select it' : 'Copy'}
             </Button>
           </div>
         </div>
@@ -54,13 +59,26 @@ function MintResult({ result, onDone }) {
         <div className="mt-5">
           <p className="text-xs uppercase tracking-widest text-zinc-500 mb-2">Link</p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 min-w-0 truncate rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs">
-              {result.link}
-            </code>
+            {/* An input rather than <code>: if copying fails the value can still
+                be selected and copied by hand, which a <code> block makes
+                awkward on a phone. */}
+            <input
+              readOnly
+              value={result.link}
+              onFocus={(e) => e.target.select()}
+              onClick={(e) => e.target.select()}
+              className="flex-1 min-w-0 rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs font-mono text-zinc-200"
+            />
             <Button variant="ghost" onClick={() => copy(result.link, 'link')}>
-              {copied === 'link' ? 'Copied' : 'Copy'}
+              {copied === 'link' ? 'Copied' : copied === 'link-failed' ? 'Select it' : 'Copy'}
             </Button>
           </div>
+          {(copied === 'link-failed' || copied === 'pin-failed') && (
+            <p className="mt-2 text-xs text-amber-300">
+              Your browser blocks clipboard access over plain HTTP. Tap the field to
+              select it, then copy.
+            </p>
+          )}
           <div className="mt-4 inline-block rounded-xl bg-white p-3">
             <QrCode value={result.link} size={176} alt="QR code for the guest link" />
           </div>

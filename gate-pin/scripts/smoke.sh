@@ -76,6 +76,33 @@ check "link path serves the same page"   200 "$(code ${G}/g/aaaaaaaaaaaaaaaaaaaa
 check "API answers immediately"          401 "$(code -X POST "${J[@]}" "${CF[@]}" -d '{"credential":"999999"}' ${G}/api/guest/redeem)"
 
 echo
+echo "The link route must serve a page whose assets actually load"
+# Asserting 200 on /g/<token> was not enough: the page returned 200 while its
+# assets 404'd, so a visitor got a blank screen. Follow the references.
+PAGE=$(curl -s ${G}/g/aaaaaaaaaaaaaaaaaaaaaaaa)
+ASSETS=$(echo "${PAGE}" | grep -oE '(src|href)="[^"]+"' | sed 's/.*="//; s/"//' | grep -E '\.(js|css)$')
+if [ -z "${ASSETS}" ]; then
+  printf '  \033[31mFAIL\033[0m no asset references found on the link page\n'; FAIL=$((FAIL+1))
+fi
+for a in ${ASSETS}; do
+  case "${a}" in
+    /*) URL="${G}${a}" ;;
+    *)  URL="${G}/g/${a#./}" ;;   # what a browser would actually resolve
+  esac
+  CT=$(curl -s -o /dev/null -w '%{content_type}' "${URL}")
+  ST=$(curl -s -o /dev/null -w '%{http_code}' "${URL}")
+  case "${a}" in
+    *.js)  WANT=javascript ;;
+    *.css) WANT=css ;;
+  esac
+  if [ "${ST}" = "200" ] && echo "${CT}" | grep -q "${WANT}"; then
+    printf '  \033[32mok\033[0m   asset loads from /g/<token>%-19s %s\n' "" "${a}"; PASS=$((PASS+1))
+  else
+    printf '  \033[31mFAIL\033[0m asset %s -> %s %s (want 200 and %s)\n' "${a}" "${ST}" "${CT}" "${WANT}"; FAIL=$((FAIL+1))
+  fi
+done
+
+echo
 echo "Port split - the admin API must be unreachable from the public port"
 for p in /api/admin/grants /api/admin/health /api/admin/audit /api/; do
   check "public :8888 $p" 404 "$(code $G$p)"

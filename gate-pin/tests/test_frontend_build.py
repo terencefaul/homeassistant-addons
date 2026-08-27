@@ -7,6 +7,7 @@ the source config, which always runs, and once against the built output.
 """
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -92,3 +93,32 @@ def test_the_generated_qr_decodes_back_to_the_link():
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "a real decoder reads it back verbatim" in result.stdout
+
+
+@pytest.mark.skipif(not (DIST / "guest").exists(), reason="frontend not built")
+def test_guest_asset_paths_are_absolute():
+    """The guest page is served from the domain root but is ALSO reached at
+    /g/<token>. A relative base makes the browser request /g/assets/... , which
+    does not exist -- the page loads, renders nothing, and the only symptom is a
+    blank screen or a 404 on an asset. Shipped once; caught by hand, not here."""
+    html = (DIST / "guest" / "index.html").read_text()
+    refs = re.findall(r'(?:src|href)="([^"]+)"', html)
+    assert refs, "no asset references found at all"
+    relative = [r for r in refs if r.startswith("./") or (not r.startswith(("/", "http", "data:")))]
+    assert not relative, (
+        f"guest assets must be absolute so they resolve from /g/<token>: {relative}"
+    )
+
+
+@pytest.mark.skipif(not (DIST / "admin").exists(), reason="frontend not built")
+def test_admin_asset_paths_are_relative():
+    """The mirror image, and the reason the two configs are separate: Home
+    Assistant ingress serves the admin panel under /api/hassio_ingress/<token>/,
+    a prefix that changes. Absolute paths there would leave the ingress path and
+    hit Home Assistant itself."""
+    html = (DIST / "admin" / "index.html").read_text()
+    refs = re.findall(r'(?:src|href)="([^"]+)"', html)
+    absolute = [r for r in refs if r.startswith("/")]
+    assert not absolute, (
+        f"admin assets must be relative to survive the ingress prefix: {absolute}"
+    )

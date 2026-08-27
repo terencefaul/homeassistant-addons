@@ -16,7 +16,12 @@ import tailwind from '@tailwindcss/vite'
 // contains no service worker.
 export default defineConfig({
   root: 'guest',
-  base: './',
+  // MUST be absolute, not './'. The guest page is served from the domain root
+  // but is also reached at /g/<token>, and a relative base makes the browser
+  // ask for /g/assets/... which does not exist -- the page loads and then
+  // renders nothing. The admin bundle is the opposite case: ingress serves it
+  // under a path that changes, so it needs './'.
+  base: '/',
   plugins: [react(), tailwind()],
   build: {
     outDir: '../dist/guest',
