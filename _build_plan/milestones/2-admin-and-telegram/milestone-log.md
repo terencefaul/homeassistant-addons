@@ -67,8 +67,8 @@ Built 2026-08-27, in the same session as milestone 1 at the user's instruction.
 
 ## Deviations
 
-- The QR code carried over from milestone 1 is still a placeholder, not a
-  scannable code. See that log.
+- None outstanding. The QR code carried over from milestone 1 is now real and
+  scannable; see that log.
 - `python-telegram-bot` was not used; the bot talks to the Bot API directly. See
   milestone 1's log for the reasoning.
 

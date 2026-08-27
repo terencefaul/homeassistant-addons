@@ -11,3 +11,5 @@
 - Telegram bot: `/new`, `/list`, `/revoke`, `/extend`, `/presets`
 - Alerts to a Home Assistant `notify.*` service on lockout and bot failure
 - Admin panel installable as a PWA. The guest page deliberately is not.
+- Scannable QR code on the mint screen, generated in the browser and
+  verified at build time by decoding it back

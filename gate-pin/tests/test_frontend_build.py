@@ -7,6 +7,8 @@ the source config, which always runs, and once against the built output.
 """
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -62,3 +64,31 @@ def test_built_admin_bundle_does_have_a_service_worker():
     assert "sw.js" in files
     manifest = json.loads((DIST / "admin" / "manifest.webmanifest").read_text())
     assert manifest["display"] == "standalone"
+
+
+@pytest.mark.skipif(not (DIST / "admin").exists(), reason="frontend not built")
+def test_the_qr_library_stays_out_of_the_public_bundle():
+    """The QR code is an admin-only feature. Every kilobyte on the guest bundle
+    is paid for on one bar of signal at a gate, and every dependency there is
+    one more thing running on the public origin."""
+    admin = " ".join(p.read_text(errors="ignore") for p in (DIST / "admin").rglob("*.js"))
+    guest = " ".join(p.read_text(errors="ignore") for p in (DIST / "guest").rglob("*.js"))
+    assert "getModuleCount" in admin, "the QR library should be in the admin bundle"
+    assert "getModuleCount" not in guest
+    assert "isDark" not in guest
+
+
+@pytest.mark.skipif(
+    shutil.which("node") is None or not (FRONTEND / "node_modules").exists(),
+    reason="node or node_modules unavailable",
+)
+def test_the_generated_qr_decodes_back_to_the_link():
+    """Runs the real generator and points a real decoder at the rendered
+    symbol. A QR that renders but does not scan looks perfectly fine on screen
+    and fails only when somebody is standing at the gate holding up a phone."""
+    result = subprocess.run(
+        ["node", "scripts/verify-qr.mjs"],
+        cwd=FRONTEND, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "a real decoder reads it back verbatim" in result.stdout

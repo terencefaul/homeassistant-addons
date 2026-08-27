@@ -116,11 +116,19 @@ Admin: everything under `/api/admin/`.
 ## Deviations from the PRD or the plan
 
 - The bot framework, as in (1) above.
-- The QR code on the mint screen is currently a placeholder SVG showing the link
-  as text, not a scannable QR. Rendering a real one needs a QR library and none
-  was added. **This is the one PRD item not fully delivered.** The link is still
-  copyable and the placeholder is legible, but it will not scan. Adding
-  `qrcode-generator` or similar to the admin bundle would finish it.
+- ~~The QR code on the mint screen is a placeholder.~~ **Resolved.** A real,
+  scannable QR is now generated in the browser from the mint response, so the
+  link never travels again and it works in the installed PWA offline.
+  `qrcode-generator` (2 packages, ~22 KB) was added to the admin bundle only —
+  a test asserts it does not reach the public guest bundle, whose build output
+  is byte-identical to before.
+
+  Correctness is verified rather than assumed: `frontend/scripts/verify-qr.mjs`
+  runs on every build and checks the three finder patterns, the timing
+  patterns, the 4-module quiet zone and one path rect per dark module — then
+  rasterises the symbol and points `jsqr` at it to confirm it decodes back to
+  the exact link. A QR that renders but does not scan looks perfectly fine on
+  screen and fails only when somebody is standing at the gate.
 
 ## Defects found and fixed during verification
 

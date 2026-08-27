@@ -13,9 +13,17 @@ jobs:
           node-version: '22'
       - name: Build frontend
         working-directory: gate-pin/frontend
-        run: |
-          npm install --no-audit --no-fund
-          npm run build
+        run: npm install --no-audit --no-fund
+
+      # Named as its own step so a QR that renders but does not scan fails
+      # visibly rather than inside a build log.
+      - name: Verify the QR code decodes
+        working-directory: gate-pin/frontend
+        run: npm run verify:qr
+
+      - name: Build bundles
+        working-directory: gate-pin/frontend
+        run: npm run build
 
       - uses: actions/setup-python@v5
         with:

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import * as api from './api.js'
 import EntityPicker from './EntityPicker.jsx'
+import QrCode from './QrCode.jsx'
 import { Button, Card, Field, Pill, STATUS_TONE, clock, input, relative } from './ui.jsx'
 
 const TABS = ['Mint', 'Grants', 'Presets', 'Cameras', 'Audit', 'Settings']
@@ -60,28 +61,18 @@ function MintResult({ result, onDone }) {
               {copied === 'link' ? 'Copied' : 'Copy'}
             </Button>
           </div>
-          <img
-            alt="QR code for the link"
-            className="mt-4 rounded-xl bg-white p-3 w-44 h-44"
-            src={`data:image/svg+xml;utf8,${encodeURIComponent(qrPlaceholder(result.link))}`}
-          />
+          <div className="mt-4 inline-block rounded-xl bg-white p-3">
+            <QrCode value={result.link} size={176} alt="QR code for the guest link" />
+          </div>
+          <p className="mt-2 text-xs text-zinc-500">
+            Hold this up for someone standing at the gate.
+          </p>
         </div>
       )}
 
       <Button className="mt-6 w-full" onClick={onDone}>Done</Button>
     </Card>
   )
-}
-
-/* A dependency-free QR stand-in. Rendering a real QR needs a library; until
-   one is added this shows the link so it can still be read off the screen. */
-function qrPlaceholder(text) {
-  const short = text.replace(/^https?:\/\//, '')
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="176" height="176" viewBox="0 0 176 176">
-    <rect width="176" height="176" fill="#fff"/>
-    <text x="88" y="84" text-anchor="middle" font-family="monospace" font-size="9" fill="#111">${short.slice(0, 24)}</text>
-    <text x="88" y="98" text-anchor="middle" font-family="monospace" font-size="9" fill="#111">${short.slice(24, 48)}</text>
-  </svg>`
 }
 
 function MintTab({ entities, presets, onMinted, setError }) {
