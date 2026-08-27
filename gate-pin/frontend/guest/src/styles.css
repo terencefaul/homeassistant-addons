@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+/* Themes are chosen per grant. All self-hosted -- no font or asset is ever
+   fetched from another host, because that request would carry the link token
+   out in the Referer header. */
+:root {
+  --gp-accent: #22c55e;
+}
+[data-theme="dark"]     { --gp-bg:#0b0b0d; --gp-fg:#fafafa; --gp-card:#1a1a1f; --gp-muted:#a1a1aa; --gp-border:#2a2a32; }
+[data-theme="light"]    { --gp-bg:#f7f7f8; --gp-fg:#18181b; --gp-card:#ffffff; --gp-muted:#52525b; --gp-border:#e4e4e7; }
+[data-theme="contrast"] { --gp-bg:#000000; --gp-fg:#ffffff; --gp-card:#000000; --gp-muted:#e5e5e5; --gp-border:#ffffff; }
+[data-theme="warm"]     { --gp-bg:#1c1917; --gp-fg:#fafaf9; --gp-card:#292524; --gp-muted:#a8a29e; --gp-border:#44403c; }
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--gp-bg);
+  color: var(--gp-fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* Usable one-handed at a gate, in the rain. */
+  padding-bottom: env(safe-area-inset-bottom);
+}

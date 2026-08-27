@@ -1,0 +1,23 @@
+{
+  "name": "gate-pin-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:guest && npm run build:admin",
+    "build:guest": "vite build --config vite.guest.config.js",
+    "build:admin": "vite build --config vite.admin.config.js",
+    "dev:guest": "vite --config vite.guest.config.js",
+    "dev:admin": "vite --config vite.admin.config.js"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "vite": "^6.0.0",
+    "vite-plugin-pwa": "^0.21.1"
+  }
+}
