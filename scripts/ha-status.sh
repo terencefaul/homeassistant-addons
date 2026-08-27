@@ -32,7 +32,8 @@ else
 fi
 
 echo
-api "${HA_URL%/}/api/hassio/addons" | python3 -c '
+ADDONS_JSON=$(api "${HA_URL%/}/api/hassio/addons")
+echo "${ADDONS_JSON}" | python3 -c '
 import json, sys
 try:
     data = json.load(sys.stdin)["data"]["addons"]
@@ -65,4 +66,40 @@ for a in rows:
         print("       repository copy instead and remove this one.")
     else:
         print("    -> up to date as far as Supervisor can see")
+    print()
+    print("  Point your tunnel at this add-on with:")
+    print(f"    http://{slug.replace('_', '-')}:8888")
+    print("    (confirm against the Hostname shown below, which comes from Supervisor)")
 '
+
+# The hostname Supervisor actually assigns is what cloudflared must target, and
+# it is the one thing that cannot be worked out from the outside. Ask for it.
+SLUG=$(echo "${ADDONS_JSON}" | python3 -c '
+import json, sys
+try:
+    for a in json.load(sys.stdin)["data"]["addons"]:
+        if "gate_pin" in a["slug"]:
+            print(a["slug"]); break
+except Exception:
+    pass
+')
+
+if [ -n "${SLUG}" ]; then
+  echo
+  echo "Supervisor's own view of the add-on:"
+  api "${HA_URL%/}/api/hassio/addons/${SLUG}/info" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["data"]
+host = d.get("hostname")
+print(f"  hostname     {host}")
+print(f"  ingress      {d.get("ingress_url")}")
+ports = d.get("network") or {}
+print(f"  ports        {ports if ports else "none published (correct for a tunnel)"}")
+print()
+print("  Cloudflare Tunnel -> Public hostname -> Service URL:")
+print(f"    http://{host}:8888")
+print()
+print("  Do NOT route 8099. That is the admin panel and Home Assistant already")
+print("  protects it through ingress.")
+'
+fi

@@ -21,16 +21,42 @@ somebody else, which would hand your gate to a stranger.
 ### 2. A public route
 
 This add-on serves plain HTTP on port 8888 and holds no certificates. It expects
-something in front of it that terminates TLS. **Cloudflare Tunnel** is the
-intended setup:
+**Cloudflare Tunnel** in front of it — and that is not merely a convenience.
 
-1. In Cloudflare Zero Trust, create a tunnel.
-2. Add a public hostname routed to this add-on's `:8888`. **Do not route 8099** —
-   that is the admin panel, and Home Assistant already protects it.
-3. Leave `8888/tcp` **unmapped** in this add-on's Network settings when
-   `cloudflared` runs as an add-on on the same machine. It reaches this container
-   over the add-on network, and the port then never binds on the host at all.
-4. Set `trusted_proxy_cidr` to the range `cloudflared` connects from.
+The rate limiting is the only thing between a 6-digit PIN and your gate, and it
+depends on the visitor's address being unforgeable. That holds because the
+origin cannot be reached except through the thing that sets the header. A tunnel
+opens no inbound port, so there is no way around it. A port-forwarded reverse
+proxy leaves your address reachable directly, and an attacker who finds it can
+bypass the proxy and forge the header — while every test you run still passes.
+
+1. Install the **cloudflared** add-on.
+2. In **Cloudflare Zero Trust → Networks → Tunnels**, create a tunnel and put
+   its token into that add-on.
+3. Add a **public hostname** on the tunnel, with the service URL set to this
+   add-on's hostname on port **8888**:
+
+   ```
+   http://<gate-pin-hostname>:8888
+   ```
+
+   The hostname is assigned by Supervisor and shown on this add-on's Info tab.
+   **Do not route 8099** — that is the admin panel, and Home Assistant already
+   protects it through ingress.
+
+4. Cloudflare creates a **proxied CNAME** for the hostname. If an A record for
+   that name already exists, delete it first — it will otherwise keep answering
+   and the tunnel will appear not to work.
+5. Leave `8888/tcp` **unmapped** in this add-on's Network settings.
+   `cloudflared` reaches this container over the add-on network, so the port
+   never binds on the host at all — which is the precondition that makes
+   trusting `CF-Connecting-IP` safe.
+6. Set `trusted_proxy_cidr` to the range `cloudflared` connects from.
+
+**Checking it worked.** `curl -sI https://your-hostname/` should return
+`Referrer-Policy: no-referrer`. That header is set by this add-on's nginx and
+nothing else, so it is proof the request reached the add-on rather than your
+router, an old DNS record, or another proxy.
 
 ### 3. Configure and start
 
