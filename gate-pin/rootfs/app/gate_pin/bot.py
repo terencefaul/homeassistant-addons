@@ -329,6 +329,35 @@ class TelegramBot:
             else:
                 await self._answer_callback(cid, "Already gone")
 
+        elif action == "i":
+            grant_id, _, kind = arg.partition(":")
+            try:
+                result = await asyncio.to_thread(
+                    g.reissue, self._store, grant_id,
+                    kinds=[kind or "token"],
+                    pin_length=self._pin_length,
+                    max_live_pin_grants=self._cap,
+                )
+            except g.MintError as exc:
+                await self._answer_callback(cid, str(exc)[:180])
+                return
+            await self._answer_callback(cid, "New credential issued")
+            # The previous key of this kind has just stopped working, and that
+            # is easy to miss when it happened via a button.
+            await self.send(
+                chat_id,
+                f"<b>{html.escape(result.grant.label or 'Grant')}</b> · "
+                f"<code>{result.grant.id}</code>\n"
+                f"New {'PIN' if kind == 'pin' else 'link'} issued. The previous one "
+                f"no longer works.\nValid until {_clock(result.grant.valid_until)}",
+                buttons=[[("Revoke", f"r:{result.grant.id}")]],
+            )
+            if result.pin:
+                await self.send(chat_id, f"PIN <code>{result.pin}</code>")
+            link = result.link(self._base_url)
+            if link:
+                await self.send(chat_id, link)
+
         elif action == "x":
             grant_id, _, secs = arg.partition(":")
             grant = await asyncio.to_thread(self._store.get_grant, grant_id)
@@ -432,9 +461,16 @@ class TelegramBot:
             )
         cap = await asyncio.to_thread(self._store.live_pin_grant_count)
         lines.append(f"\nLive PIN grants: {cap}/{self._cap}")
-        buttons = [
-            [(f"Revoke {x.label or x.id}"[:28], f"r:{x.id}")] for x in grants[:8]
-        ]
+        buttons = []
+        for x in grants[:6]:
+            row = []
+            if "token" in x.kinds:
+                row.append((f"New link · {x.label or x.id}"[:26], f"i:{x.id}:token"))
+            if "pin" in x.kinds:
+                row.append((f"New PIN · {x.label or x.id}"[:26], f"i:{x.id}:pin"))
+            if row:
+                buttons.append(row)
+            buttons.append([(f"Revoke {x.label or x.id}"[:28], f"r:{x.id}")])
         await self.send(chat_id, "\n".join(lines), buttons=buttons or None)
 
     async def _revoke(self, chat_id: int, args: list[str]) -> None:

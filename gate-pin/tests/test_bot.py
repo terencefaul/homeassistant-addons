@@ -153,3 +153,49 @@ def test_callback_data_fits_telegram_limit(bot):
         for row in (m.get("reply_markup") or {}).get("inline_keyboard", []):
             for btn in row:
                 assert len(btn["callback_data"].encode()) <= 64, btn
+
+
+def test_list_offers_reissue_and_revoke_per_grant(bot):
+    b, store, tg = bot
+    run(b._handle(tap(ALLOWED, "m:p1")))
+    tg.sent.clear()
+    run(b._handle(msg(ALLOWED, "/list")))
+    data = [btn["callback_data"]
+            for row in tg.sent[0]["reply_markup"]["inline_keyboard"] for btn in row]
+    assert any(d.startswith("i:") and d.endswith(":token") for d in data)
+    assert any(d.startswith("i:") and d.endswith(":pin") for d in data)
+    assert any(d.startswith("r:") for d in data)
+
+
+def test_reissue_button_replaces_that_credential_only(bot):
+    """Re-issuing the link must leave the PIN working, so you can replace just
+    the one that went missing."""
+    b, store, tg = bot
+    run(b._handle(tap(ALLOWED, "m:p1")))
+    old_link = next(t for t in (m["text"] for m in tg.sent) if t.startswith("https://"))
+    old_pin = next(t for t in (m["text"] for m in tg.sent) if "PIN <code>" in t)
+    grant = store.list_grants()[0]
+
+    tg.sent.clear()
+    run(b._handle(tap(ALLOWED, f"i:{grant.id}:token")))
+    new_link = next(t for t in (m["text"] for m in tg.sent) if t.startswith("https://"))
+
+    assert new_link != old_link
+    old_token = old_link.rsplit("/", 1)[-1]
+    new_token = new_link.rsplit("/", 1)[-1]
+    from gate_pin import grants as g
+    assert g.redeem(store, old_token).outcome == g.OUTCOME_UNKNOWN
+    assert g.redeem(store, new_token).ok
+    # The PIN was not re-issued, so it must still work.
+    pin = old_pin.split("<code>")[1].split("</code>")[0]
+    assert g.redeem(store, pin).ok
+
+
+def test_reissue_button_says_the_old_one_stopped_working(bot):
+    """Easy to miss when it happened via a button rather than a decision."""
+    b, store, tg = bot
+    run(b._handle(tap(ALLOWED, "m:p1")))
+    grant = store.list_grants()[0]
+    tg.sent.clear()
+    run(b._handle(tap(ALLOWED, f"i:{grant.id}:token")))
+    assert any("no longer works" in m["text"] for m in tg.sent)

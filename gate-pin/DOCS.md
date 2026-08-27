@@ -67,6 +67,15 @@ bypass the proxy and forge the header — while every test you run still passes.
    trusting `CF-Connecting-IP` safe.
 6. Set `trusted_proxy_cidr` to the range `cloudflared` connects from.
 
+**Think twice before restricting the guest hostname by country, and do not
+enable Bot Fight Mode on it.** Both look like cheap hardening and both lock out
+real visitors: plenty of people run a VPN on their phone permanently, and their
+traffic arrives from another country and from a datacentre address. The failure
+is opaque — a Cloudflare block page, not your gate page — so the visitor has no
+idea what to do. The defences that matter here are the 192-bit link token, the
+rate limiting and the short window, and none of them care where the request came
+from.
+
 **Do not put Cloudflare Access in front of the guest hostname.** It would demand
 a login before a visitor ever sees the PIN box, which defeats the point. Access
 on your other hostnames is fine — just not this one.
@@ -123,8 +132,9 @@ The result screen shows the PIN, the link, and a scannable QR — **once**.
 mints. Typing entity ids one-handed at a gate is the interface this replaces, so
 **create your presets first** in the panel; the menu is built from them.
 
-The reply carries **+1 hour** and **Revoke** buttons for that grant, and
-`/list` gives a Revoke button per live grant.
+The reply carries **+1 hour** and **Revoke** buttons for that grant. `/list`
+gives **New link**, **New PIN** and **Revoke** per live grant, so you can
+re-send a credential from your phone without opening the panel.
 
 Typed commands still work, and are better when you want something ad hoc:
 
