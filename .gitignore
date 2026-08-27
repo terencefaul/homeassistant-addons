@@ -1,0 +1,26 @@
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Local secrets and runtime data — never commit
+*.env
+.env.*
+data/
+*.db
+*.db-wal
+*.db-shm
