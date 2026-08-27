@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.1.3] - 2026-08-28
+- Document routing a second hostname on an existing Cloudflare tunnel
+
 ## [0.1.2] - 2026-08-28
 - Document the Cloudflare Tunnel requirement and how to verify it
 
