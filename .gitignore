@@ -24,3 +24,7 @@ data/
 *.db
 *.db-wal
 *.db-shm
+
+# Local deploy credentials — HA_TOKEN is equivalent to a Home Assistant login
+.env
+.envrc

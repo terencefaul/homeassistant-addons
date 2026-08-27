@@ -37,14 +37,25 @@ the React bundles, then a Python stage. Two to four minutes, then mostly cached.
 **4. Configure before starting.** At minimum `external_base_url` — the public URL
 your tunnel will serve. Then start it; the panel appears in the sidebar.
 
-## Updating
+## Updating — one command
 
 ```bash
-./gate-pin/scripts/deploy.sh /Volumes/addons
+export HA_URL=http://homeassistant.local:8123
+export HA_TOKEN=...    # Profile > Security > Long-lived access tokens
+
+./gate-pin/scripts/deploy.sh /Volumes/addons --rebuild
 ```
 
-Then open the add-on in Home Assistant and click **Rebuild**. Bumping `version:`
-in `gate-pin/config.yaml` also makes Home Assistant offer it as an update.
+That copies the changed files and rebuilds and restarts the add-on through the
+Home Assistant API. Nothing to click. Home Assistant proxies the Supervisor API
+at `/api/hassio` for admins, so it works from anywhere that can reach Home
+Assistant.
+
+Put those two exports in a `.env` you do not commit — the token is equivalent to
+your Home Assistant login.
+
+Without `--rebuild` it just copies, and you click **Rebuild** on the add-on page
+yourself.
 
 ---
 
