@@ -67,4 +67,10 @@ or depend on anything inside `_build_plan/`.
 Do not treat `_build_plan/` as long-living documentation. Once the initial
 milestones are complete, this folder is expected to be deleted.
 
+**Delete it when:** the five checks marked `NOT VERIFIABLE HERE` in
+`_build_plan/milestones/1-live-gate-access/milestone-log.md` have been confirmed
+on a real Home Assistant install. They are the only live content left in here;
+everything else is history, and git preserves it either way. Until then those
+five are the reason this folder still exists.
+
 `docs/plans/` is **not** temporary and should outlive it.

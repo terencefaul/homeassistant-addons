@@ -40,6 +40,10 @@ The prompt required these before building. Results:
 | 4 | `/data` survives an add-on restart | **NOT VERIFIABLE HERE.** |
 | 6 | The container hostname resolves from another add-on | **NOT VERIFIABLE HERE.** Decides whether 8888 needs publishing at all. |
 
+**These five are why `_build_plan/` still exists.** They are the only content in
+this folder that is not already history. Confirm them on the first real install,
+then the whole folder can be deleted -- git preserves it.
+
 Five of the six need a running Home Assistant OS and must be checked on first
 install. Number 5 was the one that could have changed the stack, and it passed,
 so the stack in the PRD stands unchanged.
