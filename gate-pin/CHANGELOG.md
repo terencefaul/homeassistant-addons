@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.1] - 2026-08-28
+- Re-issue a credential from Telegram; warn against country and bot rules on the guest hostname
+
 ## [0.4.0] - 2026-08-28
 - Re-issue a credential for an existing grant; document installing the panel to a home screen
 
