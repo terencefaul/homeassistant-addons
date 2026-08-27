@@ -3,65 +3,91 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  test:
+  # Every add-on is a top-level folder containing a config.yaml. Discovering
+  # them means adding an add-on needs no edit here.
+  discover:
     runs-on: ubuntu-latest
+    outputs:
+      addons: ${{ steps.find.outputs.addons }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: find
+        run: |
+          list=$(find . -maxdepth 2 -name config.yaml -not -path './.*' \
+                 | sed 's|^\./||; s|/config.yaml$||' | jq -R -s -c 'split("\n")[:-1]')
+          echo "addons=${list}" >> "$GITHUB_OUTPUT"
+          echo "found: ${list}"
+
+  test:
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        addon: ${{ fromJson(needs.discover.outputs.addons) }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Build frontend
-        working-directory: gate-pin/frontend
+      - name: Install frontend dependencies
+        working-directory: ${{ matrix.addon }}/frontend
         run: npm install --no-audit --no-fund
+        continue-on-error: false
 
       # Named as its own step so a QR that renders but does not scan fails
       # visibly rather than inside a build log.
       - name: Verify the QR code decodes
-        working-directory: gate-pin/frontend
+        working-directory: ${{ matrix.addon }}/frontend
         run: npm run verify:qr
 
       - name: Build bundles
-        working-directory: gate-pin/frontend
+        working-directory: ${{ matrix.addon }}/frontend
         run: npm run build
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Install test dependencies
-        run: pip install -r gate-pin/requirements.txt pytest
+        run: pip install -r ${{ matrix.addon }}/requirements.txt pytest
 
-      # Runs after the frontend build so the "no service worker on the public
-      # origin" assertions check real build output, not just the config.
+      # After the frontend build, so the "no service worker on the public
+      # origin" assertions check real build output and not just the config.
       - name: Test
-        working-directory: gate-pin
+        working-directory: ${{ matrix.addon }}
         run: python -m pytest tests -q
 
   build-image:
+    needs: discover
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
+        # A real cross product: every add-on on every architecture. The include
+        # entries only attach `platform` to combinations that already exist --
+        # an include without an `addon` would spawn jobs with no add-on at all.
+        addon: ${{ fromJson(needs.discover.outputs.addons) }}
+        arch: [amd64, aarch64, armv7]
         include:
           - arch: amd64
-            base: ghcr.io/home-assistant/amd64-base-python:3.12-alpine3.20
             platform: linux/amd64
           - arch: aarch64
-            base: ghcr.io/home-assistant/aarch64-base-python:3.12-alpine3.20
             platform: linux/arm64
           - arch: armv7
-            base: ghcr.io/home-assistant/armv7-base-python:3.12-alpine3.20
             platform: linux/arm/v7
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
-      # requirements.txt is installed with --only-binary=:all:, so this job
-      # fails loudly the day a musl wheel stops being published for an
-      # architecture rather than silently compiling Rust for twenty minutes.
-      - name: Build ${{ matrix.arch }}
+      # requirements.txt installs with --only-binary=:all:, so this fails loudly
+      # the day a musl wheel stops being published for an architecture rather
+      # than silently compiling Rust for twenty minutes.
+      - name: Build ${{ matrix.addon }} for ${{ matrix.arch }}
         uses: docker/build-push-action@v6
         with:
-          context: gate-pin
+          context: ${{ matrix.addon }}
           platforms: ${{ matrix.platform }}
-          build-args: BUILD_FROM=${{ matrix.base }}
+          build-args: |
+            BUILD_FROM=ghcr.io/home-assistant/${{ matrix.arch }}-base-python:3.12-alpine3.20
           push: false

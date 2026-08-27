@@ -33,7 +33,7 @@ URL your tunnel will serve. Then start it; the panel appears in the sidebar.
 From your working copy:
 
 ```bash
-./gate-pin/scripts/release.sh patch "What changed"
+./scripts/release.sh gate-pin patch "What changed"
 ```
 
 That bumps `version:` in `config.yaml`, writes a CHANGELOG entry, commits and
@@ -55,7 +55,7 @@ For iterating, skip the repository entirely and push straight to `/addons`:
 export HA_URL=http://homeassistant.local:8123
 export HA_TOKEN=...    # Profile > Security > Long-lived access tokens
 
-./gate-pin/scripts/deploy.sh /Volumes/addons --rebuild
+./scripts/deploy.sh gate-pin /Volumes/addons --rebuild
 ```
 
 That copies the changed files and rebuilds and restarts the add-on through the

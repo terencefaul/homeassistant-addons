@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Copy this add-on onto a Home Assistant machine's /addons folder.
 #
-#   ./scripts/deploy.sh /Volumes/addons              # Samba add-on, mounted on a Mac
-#   ./scripts/deploy.sh root@homeassistant.local     # SSH add-on
-#   ./scripts/deploy.sh root@192.168.1.50:/addons    # SSH, explicit path
+#   ./scripts/deploy.sh gate-pin /Volumes/addons              # mounted Samba share
+#   ./scripts/deploy.sh gate-pin root@homeassistant.local     # SSH add-on
+#   ./scripts/deploy.sh gate-pin root@192.168.1.50:/addons    # SSH, explicit path
 #
 # Add --rebuild to make it a one-command update: the add-on is rebuilt and
 # restarted through the Home Assistant API, so there is nothing to click.
@@ -18,23 +18,33 @@
 set -uo pipefail
 
 REBUILD=0
+ADDON=""
 TARGET=""
 for arg in "$@"; do
   case "${arg}" in
     --rebuild) REBUILD=1 ;;
-    *)         TARGET="${arg}" ;;
+    *) if [ -z "${ADDON}" ]; then ADDON="${arg}"; else TARGET="${arg}"; fi ;;
   esac
 done
 
-if [ -z "${TARGET}" ]; then
-  echo "usage: $0 <mounted-path | [user@]host[:/addons]> [--rebuild]"
+cd "$(dirname "$0")/.."
+ROOT="$PWD"
+
+if [ -z "${ADDON}" ] || [ -z "${TARGET}" ]; then
+  echo "usage: $0 <add-on> <mounted-path | [user@]host[:/addons]> [--rebuild]"
+  echo "add-ons in this repository:"
+  for d in */config.yaml; do [ -f "$d" ] && echo "  $(dirname "$d")"; done
   exit 1
 fi
 
-cd "$(dirname "$0")/.."
-SRC="$PWD"
-NAME="$(basename "${SRC}")"
-VERSION="$(grep -E '^version:' config.yaml | head -1 | tr -d '\"' | awk '{print $2}')"
+if [ ! -f "${ADDON}/config.yaml" ]; then
+  echo "No add-on called '${ADDON}' (expected ${ADDON}/config.yaml)"
+  exit 1
+fi
+
+SRC="${ROOT}/${ADDON}"
+NAME="${ADDON}"
+VERSION="$(grep -E '^version:' "${SRC}/config.yaml" | head -1 | tr -d '\"' | awk '{print $2}')"
 
 EXCLUDES=(
   --exclude 'frontend/node_modules'
@@ -73,7 +83,7 @@ else
   echo "  -> ${HOST}:${PATH_ON_HOST%/}/${NAME}"
 fi
 
-SLUG="local_$(grep -E '^slug:' config.yaml | awk '{print $2}')"
+SLUG="local_$(grep -E '^slug:' "${SRC}/config.yaml" | awk '{print $2}')"
 
 if [ "${REBUILD}" = "1" ]; then
   if [ -z "${HA_URL:-}" ] || [ -z "${HA_TOKEN:-}" ]; then
