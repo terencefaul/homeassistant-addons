@@ -48,7 +48,7 @@
     <!-- HERO -->
     <section>
       <h1 class="text-4xl sm:text-5xl font-bold tracking-tight">Gate PIN</h1>
-      <p class="mt-5 text-lg sm:text-xl text-zinc-600 dark:text-zinc-400 leading-relaxed">A Home Assistant add-on that gives a visitor a short-lived credential — a 6-digit PIN you can read over the phone, or a tokenised link you send them — which operates only the entities you chose, only for as long as you allow. You mint and revoke credentials from a Telegram bot or an admin panel inside Home Assistant; the visitor gets a mobile page at <span class="font-mono text-base">gate.terica.co.za</span> and access to nothing else.</p>
+      <p class="mt-5 text-lg sm:text-xl text-zinc-600 dark:text-zinc-400 leading-relaxed">A Home Assistant add-on that gives a visitor a short-lived credential — a 6-digit PIN you can read over the phone, or a tokenised link you send them — which operates only the entities you chose, only for as long as you allow. You mint and revoke credentials from a Telegram bot or an admin panel inside Home Assistant; the visitor gets a mobile page at <span class="font-mono text-base">gate.example.com</span> and access to nothing else.</p>
       <div class="mt-6 flex flex-wrap gap-2">
         <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-300">Home Assistant add-on</span>
         <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-300">Python 3.12</span>
@@ -272,7 +272,7 @@
             <h3 class="font-semibold text-zinc-900 dark:text-zinc-100">Cloudflare Tunnel</h3>
             <span class="ml-auto text-xs text-zinc-500 dark:text-zinc-400">Public access</span>
           </div>
-          <p class="mt-3 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">Makes <span class="font-mono text-xs">gate.terica.co.za</span> reachable from the internet with no inbound port open on your connection, and terminates HTTPS at the edge. It also supplies the visitor's real IP, which the rate limiting depends on.</p>
+          <p class="mt-3 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">Makes <span class="font-mono text-xs">gate.example.com</span> reachable from the internet with no inbound port open on your connection, and terminates HTTPS at the edge. It also supplies the visitor's real IP, which the rate limiting depends on.</p>
           <p class="mt-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5"><i data-lucide="key" class="w-3 h-3"></i>Credentials needed</p>
           <ul class="mt-2 space-y-1.5 list-none p-0">
             <li class="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300"><i data-lucide="key-round" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500"></i>Tunnel token from Cloudflare Zero Trust</li>
@@ -439,7 +439,7 @@
               </div>
             </div>
             <div class="mt-5 rounded-md border-l-4 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-sm text-emerald-900 dark:text-emerald-200">
-              <p class="flex items-start gap-2"><i data-lucide="flag" class="w-4 h-4 mt-0.5 shrink-0"></i><span><span class="font-semibold">Done when:</span> from a phone on mobile data — not on your home wi-fi — you open <span class="font-mono text-xs">gate.terica.co.za</span>, type a PIN you just minted, and the gate opens. A wrong code is refused and slows you down on repeat attempts. A code you revoked stops working immediately, even in a tab that was already open.</span></p>
+              <p class="flex items-start gap-2"><i data-lucide="flag" class="w-4 h-4 mt-0.5 shrink-0"></i><span><span class="font-semibold">Done when:</span> from a phone on mobile data — not on your home wi-fi — you open <span class="font-mono text-xs">gate.example.com</span>, type a PIN you just minted, and the gate opens. A wrong code is refused and slows you down on repeat attempts. A code you revoked stops working immediately, even in a tab that was already open.</span></p>
             </div>
           </div>
         </article>

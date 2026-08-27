@@ -9,7 +9,7 @@ All `file:line` references below are into that repository unless stated otherwis
 ## Context
 
 The want: a visitor arrives at the property, is given a short-lived credential, opens
-`gate.terica.co.za`, and can operate a small set of entities I chose — nothing else — until the
+`gate.example.com`, and can operate a small set of entities I chose — nothing else — until the
 credential expires. I request credentials from a Telegram bot.
 
 `limited-guest-access` is the closest existing thing and is the starting reference. It is a
@@ -47,7 +47,7 @@ cannot be added to this container without introducing a daemon that does not cur
    URL into the Supervisor add-on store — exactly what this repo's `repository.json` and its
    README install instructions describe. Distribution therefore *follows from* the
    add-on-vs-integration decision and is not a separate choice.
-2. **`gate.terica.co.za` cannot be created by this codebase.** The base only takes `external_url`
+2. **`gate.example.com` cannot be created by this codebase.** The base only takes `external_url`
    as a display string used to render link text (`admin/actions.php:21`) and optionally reads
    `/ssl/*.pem` (`tls.conf`). DNS, a public route and a certificate are manual setup outside
    whatever we build. See *Manual setup outside the codebase*.
@@ -80,7 +80,7 @@ cannot be added to this container without introducing a daemon that does not cur
 | Credential model | **One grant, two credentials: a 6-digit PIN and a 128-bit token** | They are the same *kind* of thing but sit at opposite ends of the entropy/delivery tradeoff. A PIN is typed, so it is capped at ~20 bits and survives only on rate limiting; a token is never typed, so it can be 128 bits and brute force stops being a threat model. Modelling them as one object would give the link the token's silent leak surface *and* the PIN's tiny keyspace. |
 | PIN, token, or both? | **Chosen per grant at mint; default both** | The one-grant/many-credentials shape gives it for free, and it lets the live-PIN cap degrade to token-only instead of blocking. |
 | Web server | **nginx. Caddy considered and rejected.** | Caddy's advantage was managing TLS modes without boot-time config rewriting (`run.sh:8-12` sed-patches nginx today). With Cloudflare terminating TLS the add-on has no TLS config at all, so that advantage evaporates — and nginx is the more conventional choice for an add-on others may read. Revisit if published to installers without a tunnel. |
-| TLS | **Cloudflare Tunnel, terminated at the edge. No certs in the add-on.** | `terica.co.za` is already on Cloudflare, so this is the least work and the strongest posture: no inbound ports, origin unreachable directly. Also yields `CF-Connecting-IP`, which is unforgeable and replaces the `X-Forwarded-For` guesswork in §2. |
+| TLS | **Cloudflare Tunnel, terminated at the edge. No certs in the add-on.** | The domain is already on Cloudflare, so this is the least work and the strongest posture: no inbound ports, origin unreachable directly. Also yields `CF-Connecting-IP`, which is unforgeable and replaces the `X-Forwarded-For` guesswork in §2. |
 | PWA scope | **Guest: manifest, no service worker. Admin: full PWA.** | Offline is meaningless for a gate, and a service worker would give the public origin persistent code execution on every visitor's phone, outliving the credential. The admin page inverts every one of those. |
 | Uses vs time | **Time window only. No use counting.** | User's call, and it deletes a lot of machinery: no `uses_spent`, no atomic decrement, no rowcount-as-authorisation, no refund-on-failure compensation. Cost recorded as Risk 1. |
 | Collapse window on first use? | **No — the window is the window** | Predictable, and a visitor going out to the van and back doesn't risk locking themselves out. Cost folded into Risk 1. |
@@ -108,7 +108,7 @@ inside the HA process, on port 8123, **same origin as `/auth/token` and the admi
 cookie**.
 
 **2. The containment you would reach for does not hold.** The obvious integration answer is
-"the reverse proxy only routes `gate.terica.co.za` → `/api/gate_pin/*`". But `requires_auth =
+"the reverse proxy only routes `gate.example.com` → `/api/gate_pin/*`". But `requires_auth =
 False` is a property of the *view*, not of the hostname. Anyone who learns HA's real address
 reaches that same unauthenticated view directly and the proxy restriction is bypassed entirely.
 With an add-on, the guest port is simply never published except through the tunnel.
@@ -137,7 +137,7 @@ kept Supervisor-agnostic.
    CF-Connecting-IP set)                              │ (8888 not on the host)
                       ┌─────────────────────────────  ▼ ──────┐
                       │ add-on container                     │
-  gate.terica.co.za   │  nginx :8888  ─► guest bundle        │
+  gate.example.com   │  nginx :8888  ─► guest bundle        │
                       │        │        proxies /api/guest/* │
                       │        │        ONLY                 │
                       │        └──► uvicorn 127.0.0.1:8080   │
@@ -466,7 +466,7 @@ because time and rate limiting are now the *only* controls.
 
 ### 1. A GET that acts
 
-**The trap.** The token link `gate.terica.co.za/g/kJ8xQ2mNp4vR7wZ1` will be sent over Telegram.
+**The trap.** The token link `gate.example.com/g/kJ8xQ2mNp4vR7wZ1` will be sent over Telegram.
 **Telegram fetches URLs in messages to build link previews.** So do WhatsApp, iMessage, Slack and
 most mail clients. If a GET can open the gate, your gate opens the moment you send the link.
 
@@ -501,7 +501,7 @@ Trust `X-Forwarded-For` unconditionally and an attacker sets a fresh value per r
 limiter never fires. Crucially, **the second one tests as working**: you try wrong codes from your
 phone, you get blocked, you conclude rate limiting works. It does not.
 
-**The fix.** Because `terica.co.za` is on Cloudflare and the tunnel is the *only* route to the
+**The fix.** Because `example.com` is on Cloudflare and the tunnel is the *only* route to the
 origin, the reliable source is **`CF-Connecting-IP`**, which Cloudflare injects and which a client
 cannot forge — Cloudflare overwrites whatever the client sent. Use it in preference to
 `X-Forwarded-For`.
@@ -566,7 +566,7 @@ instant is unchanged.
 :8888, or an extra entry under `ports:` publishes the admin API to the internet.
 
 **What the wrong version looks like.** Nothing. Everything works. The admin API is also reachable
-at `gate.terica.co.za/api/admin/…` and you have no reason to check. The base ships with both ports
+at `gate.example.com/api/admin/…` and you have no reason to check. The base ships with both ports
 published (`config.json`) and an admin panel with no authentication whatsoever (`default.conf`) —
 safe only because most users never forward 8899.
 
@@ -665,7 +665,7 @@ nginx change.
 Happy paths are the easy half. These are the ones that matter.
 
 1. **A preview fetcher cannot act.** `curl -A "TelegramBot (like TwitterBot)"
-   'https://gate.terica.co.za/g/<token>'`, then assert no `act` row in the audit table and no HA
+   'https://gate.example.com/g/<token>'`, then assert no `act` row in the audit table and no HA
    call. Repeat by sending a real Telegram message to a test chat and watching the gate.
 2. **Both credentials resolve to one grant, and revocation kills both.** Mint, redeem with the
    PIN, confirm; revoke; assert the token is now refused too, and that a *held session cookie*
@@ -693,7 +693,7 @@ Happy paths are the easy half. These are the ones that matter.
    the browser.
 10. **The gate-did-not-answer state is distinct.** Point `ha.py` at a dead socket, act, and assert
     the guest sees a different message from an invalid credential, and an audit row `act_failed`.
-11. **Admin API is not publicly reachable.** From off-host: `curl gate.terica.co.za/api/admin/…`
+11. **Admin API is not publicly reachable.** From off-host: `curl gate.example.com/api/admin/…`
     must 404 at nginx, and `:8899`/`:8099` must fail to connect. Re-run after any nginx change.
 12. **Bot death is visible.** Kill the poller task. Assert the admin UI shows the bot down within
     a minute and the add-on does not exit.
@@ -716,8 +716,8 @@ Ordering matters where noted.
 1. **Telegram bot.** `@BotFather` → `/newbot`, keep the token. Then `@userinfobot` for your
    **numeric** chat ID. Both go into add-on options. *Before step 5* — the add-on starts without
    them but the bot will not run.
-2. **Cloudflare Tunnel.** `terica.co.za` is already on Cloudflare, so this is a Zero Trust →
-   Tunnels entry, or the `cloudflared` HA add-on. Route `gate.terica.co.za` → the gate-pin
+2. **Cloudflare Tunnel.** The domain is already on Cloudflare, so this is a Zero Trust →
+   Tunnels entry, or the `cloudflared` HA add-on. Route `gate.example.com` → the gate-pin
    add-on's `:8888` **only**. Do not add a route for 8899 or 8099. No port forwarding, and no
    DNS record to create by hand — the tunnel writes its own CNAME.
 3. **Real-IP configuration.** Once the tunnel runs, set `set_real_ip_from` to cloudflared's
@@ -730,7 +730,7 @@ Ordering matters where noted.
    `CF-Connecting-IP` safe — if it does not hold, §2's limiters are bypassable.
 5. **Add-on repository.** Settings → Add-ons → ⋯ → Repositories → paste this repo's URL, install,
    configure. Same flow the base's README describes.
-6. **Cloudflare-side hardening (optional, free tier).** A WAF rule restricting `gate.terica.co.za`
+6. **Cloudflare-side hardening (optional, free tier).** A WAF rule restricting `gate.example.com`
    to ZA traffic shrinks the attack surface for a physical gate considerably, and one free
    rate-limiting rule adds a layer in front of the add-on's own. *Do not enable Bot Fight Mode* —
    it will challenge legitimate visitors on a page that must work first try.
