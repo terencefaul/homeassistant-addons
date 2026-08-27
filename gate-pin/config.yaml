@@ -31,7 +31,7 @@ ports_description:
     if your tunnel runs on another host, and firewall it to that host.
 
 options:
-  external_base_url: "https://gate.terica.co.za"
+  external_base_url: "https://gate.example.com"
   telegram_bot_token: ""
   telegram_chat_ids: []
   notify_service: ""

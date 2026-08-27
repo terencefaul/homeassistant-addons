@@ -56,7 +56,7 @@ function isFinderAt(qr, top, left) {
 }
 
 const samples = [
-  'https://gate.terica.co.za/g/4Nyl2bK_vpvBMfg9nyaaCMoV3rtV0eXG',
+  'https://gate.example.com/g/4Nyl2bK_vpvBMfg9nyaaCMoV3rtV0eXG',
   'https://example.com/g/' + 'A'.repeat(32),
   'https://a.b/g/' + 'z9_-'.repeat(8),
 ]

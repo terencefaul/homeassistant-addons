@@ -13,7 +13,7 @@ DATA_DIR = os.environ.get("GATE_PIN_DATA", "/data")
 
 @dataclass
 class Options:
-    external_base_url: str = "https://gate.terica.co.za"
+    external_base_url: str = "https://gate.example.com"
     telegram_bot_token: str = ""
     telegram_chat_ids: list[int] = field(default_factory=list)
     notify_service: str = ""
