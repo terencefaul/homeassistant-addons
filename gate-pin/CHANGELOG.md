@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.3.0] - 2026-08-28
+- Telegram buttons: /menu mints from a preset in one tap, with Revoke and +1 hour on the reply
+
 ## [0.2.2] - 2026-08-28
 - Document the telegram_chat_ids list syntax
 
