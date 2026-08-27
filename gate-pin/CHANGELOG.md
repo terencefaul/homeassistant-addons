@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.2.1] - 2026-08-28
+- Show the tunnel URL first in Settings
+
 ## [0.2.0] - 2026-08-28
 - Show the Cloudflare Tunnel service URL in the admin panel, with a copy button
 
