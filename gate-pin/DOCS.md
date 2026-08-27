@@ -119,16 +119,23 @@ sidebar.
 presets, an optional later start, a theme, and a choice of PIN, link, or both.
 The result screen shows the PIN, the link, and a scannable QR — **once**.
 
-**From Telegram.**
+**From Telegram.** Send `/menu` and you get a button per saved preset — one tap
+mints. Typing entity ids one-handed at a gate is the interface this replaces, so
+**create your presets first** in the panel; the menu is built from them.
+
+The reply carries **+1 hour** and **Revoke** buttons for that grant, and
+`/list` gives a Revoke button per live grant.
+
+Typed commands still work, and are better when you want something ad hoc:
 
 ```
+/menu                           buttons for your presets
 /new 2h cover.driveway          mint a grant
 /new plumber                    mint from a saved preset
 /new 2h cover.driveway --token-only
 /list                           live grants
 /revoke <id>                    kill a grant now
 /extend <id> 1h                 push out a live grant
-/presets                        saved presets
 ```
 
 The PIN and the link arrive as **separate messages**, so forwarding the link to
