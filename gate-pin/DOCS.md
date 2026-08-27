@@ -33,16 +33,29 @@ bypass the proxy and forge the header — while every test you run still passes.
 1. Install the **cloudflared** add-on.
 2. In **Cloudflare Zero Trust → Networks → Tunnels**, create a tunnel and put
    its token into that add-on.
-3. Add a **public hostname** on the tunnel, with the service URL set to this
-   add-on's hostname on port **8888**:
+3. Point a hostname at **this add-on's port 8888**. One tunnel serves as many
+   hostnames as you like, so an existing tunnel that already exposes Home
+   Assistant needs no second tunnel — just another route.
 
-   ```
-   http://<gate-pin-hostname>:8888
+   Using the community `cloudflared` add-on, that is its `additional_hosts`
+   option:
+
+   ```yaml
+   external_hostname: ha.example.com          # Home Assistant itself, if you expose it
+   additional_hosts:
+     - hostname: gate.example.com
+       service: http://<gate-pin-hostname>:8888
    ```
 
-   The hostname is assigned by Supervisor and shown on this add-on's Info tab.
+   Or, if you manage routes in the Cloudflare dashboard, add a public hostname
+   with service type HTTP and URL `http://<gate-pin-hostname>:8888`.
+
+   `<gate-pin-hostname>` is assigned by Supervisor and shown on this add-on's
+   Info tab. It is not guessable — do not invent it.
+
    **Do not route 8099** — that is the admin panel, and Home Assistant already
-   protects it through ingress.
+   protects it through ingress. Routing it would put your admin interface on the
+   public internet with no authentication in front of it.
 
 4. Cloudflare creates a **proxied CNAME** for the hostname. If an A record for
    that name already exists, delete it first — it will otherwise keep answering
@@ -52,6 +65,10 @@ bypass the proxy and forge the header — while every test you run still passes.
    never binds on the host at all — which is the precondition that makes
    trusting `CF-Connecting-IP` safe.
 6. Set `trusted_proxy_cidr` to the range `cloudflared` connects from.
+
+**Do not put Cloudflare Access in front of the guest hostname.** It would demand
+a login before a visitor ever sees the PIN box, which defeats the point. Access
+on your other hostnames is fine — just not this one.
 
 **Checking it worked.** `curl -sI https://your-hostname/` should return
 `Referrer-Policy: no-referrer`. That header is set by this add-on's nginx and
