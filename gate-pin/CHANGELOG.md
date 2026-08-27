@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.1.1] - 2026-08-27
+- Fix guest page assets failing to load from a /g/<token> link, and the Copy button silently doing nothing over plain HTTP
+
 ## [0.1.0] - 2026-08-27
 ### Added
 - Time-limited guest access to chosen Home Assistant entities
