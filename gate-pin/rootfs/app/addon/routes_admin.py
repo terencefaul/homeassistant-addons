@@ -299,25 +299,43 @@ async def camera_snapshot(entity_id: str, request: Request):
 CONTROL_KEY = "control_page"
 
 
-def _control_config(raw: str) -> dict:
-    """Read the stored page config.
+def _control_config(raw: str) -> list[dict]:
+    """Read the stored page config as an ordered list of blocks.
 
-    Accepts the older single-`camera` shape and lifts it into the list, so an
-    upgrade does not silently drop a camera someone had already chosen.
+    Two older shapes are lifted forward rather than discarded -- a dropped
+    setting is indistinguishable from one that never saved, so it would be
+    reported as "it forgot my cameras" rather than as an upgrade bug:
+
+      {"camera": "camera.x", "entities": [...]}   the first shape
+      {"cameras": [...], "entities": [...]}       cameras-then-controls
     """
     try:
         data = json.loads(raw) if raw else {}
     except Exception:
         data = {}
 
+    items = []
+    for it in data.get("items") or []:
+        if (
+            isinstance(it, dict)
+            and it.get("type") in ("camera", "control")
+            and isinstance(it.get("entity_id"), str)
+        ):
+            items.append({"type": it["type"], "entity_id": it["entity_id"]})
+    if items:
+        return items
+
     cameras = [c for c in (data.get("cameras") or []) if isinstance(c, str)]
     if not cameras and isinstance(data.get("camera"), str) and data["camera"]:
         cameras = [data["camera"]]
-
-    return {
-        "cameras": cameras,
-        "entities": [e for e in (data.get("entities") or []) if isinstance(e, str)],
-    }
+    return (
+        [{"type": "camera", "entity_id": c} for c in cameras]
+        + [
+            {"type": "control", "entity_id": e}
+            for e in (data.get("entities") or [])
+            if isinstance(e, str)
+        ]
+    )
 
 
 @router.get("/control")
@@ -337,45 +355,48 @@ async def get_control(request: Request):
     except HAError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    cameras = []
-    for eid in cfg["cameras"]:
+    items = []
+    for it in cfg:
+        eid = it["entity_id"]
         raw = states.get(eid)
-        cameras.append({
+        block = {
+            "type": it["type"],
             "entity_id": eid,
             "name": ((raw or {}).get("attributes") or {}).get("friendly_name") or eid,
+            # Flagged rather than hidden: silently dropping it would look like
+            # the page forgot the setting.
             "missing": raw is None,
-        })
+        }
+        if it["type"] == "control":
+            block.update({
+                "domain": policy.domain_of(eid),
+                "state": (raw or {}).get("state"),
+                "intents": policy.intents_for(eid),
+                "actionable": policy.is_actionable(eid),
+            })
+        items.append(block)
 
-    entities = []
-    for eid in cfg["entities"]:
-        raw = states.get(eid)
-        entities.append({
-            "entity_id": eid,
-            "domain": policy.domain_of(eid),
-            "name": ((raw or {}).get("attributes") or {}).get("friendly_name") or eid,
-            "state": (raw or {}).get("state"),
-            "intents": policy.intents_for(eid),
-            "actionable": policy.is_actionable(eid),
-            "missing": raw is None,
-        })
-
-    return {"cameras": cameras, "entities": entities}
+    return {"items": items}
 
 
 @router.post("/control")
 async def set_control(body: ControlConfigRequest, request: Request):
     d = deps(request)
-    for eid in body.entities:
-        if not policy.is_selectable(eid):
-            raise HTTPException(status_code=400, detail=f"{eid} cannot be exposed")
-    for cam in body.cameras:
-        if policy.domain_of(cam) != "camera":
-            raise HTTPException(status_code=400, detail=f"{cam} is not a camera entity")
+    for it in body.items:
+        if it.type == "camera":
+            if policy.domain_of(it.entity_id) != "camera":
+                raise HTTPException(
+                    status_code=400, detail=f"{it.entity_id} is not a camera entity"
+                )
+        elif not policy.is_selectable(it.entity_id):
+            raise HTTPException(
+                status_code=400, detail=f"{it.entity_id} cannot be exposed"
+            )
     await asyncio.to_thread(
         d.store.set_setting,
         CONTROL_KEY,
         # Order is the list order. No sort key to drift out of sync.
-        json.dumps({"cameras": body.cameras, "entities": body.entities}),
+        json.dumps({"items": [it.model_dump() for it in body.items]}),
     )
     return {"ok": True}
 

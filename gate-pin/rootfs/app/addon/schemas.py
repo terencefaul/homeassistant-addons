@@ -81,13 +81,21 @@ class BrandingRequest(Strict):
     property_name: str = Field(default="", max_length=60)
 
 
+class ControlItem(Strict):
+    """One block on the control page: a camera view, or a control."""
+
+    type: Literal["camera", "control"]
+    entity_id: str = Field(min_length=3, max_length=255)
+
+
 class ControlConfigRequest(Strict):
-    """The owner's own control page: cameras and controls, both ordered.
+    """The owner's control page as a single ordered list of blocks.
 
-    Order is the list order -- there is no separate sort key to keep in sync."""
+    One list rather than cameras-then-controls, so a camera can sit directly
+    above the gate it looks at. Order is the list order -- there is no separate
+    sort key to drift out of sync."""
 
-    cameras: list[str] = Field(default=[], max_length=8)
-    entities: list[str] = Field(default=[], max_length=40)
+    items: list[ControlItem] = Field(default=[], max_length=48)
 
 
 class OwnerActRequest(Strict):

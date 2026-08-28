@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import * as api from './api.js'
 import EntityControl from '../../shared/EntityControl.jsx'
-import EntityPicker from './EntityPicker.jsx'
-import { Button, Card, Field } from './ui.jsx'
+import { Button, Card, Field, Pill, input } from './ui.jsx'
 
 const POLL_MS = 5000
 const FRAME_MS = 1000
@@ -12,55 +11,155 @@ const FRAME_MS = 1000
  * Behind ingress, which is what keeps a live camera feed off the public guest
  * origin -- the guest page deliberately never shows one. It is the first tab so
  * that installing the panel to a home screen opens straight into it.
+ *
+ * The page is ONE ordered list of blocks rather than cameras-then-controls, so
+ * a camera can sit directly above the gate it looks at. Consecutive cameras
+ * still group into a grid, so "two cameras then two gates" looks the way it did
+ * before without being the only arrangement available.
  */
-function Reorder({ ids, byId, onMove }) {
+
+function groupRuns(items) {
+  const runs = []
+  for (const item of items) {
+    const last = runs[runs.length - 1]
+    if (last && last.type === 'camera' && item.type === 'camera') last.items.push(item)
+    else runs.push({ type: item.type, items: [item] })
+  }
+  return runs
+}
+
+function CameraRun({ run, frame, expanded, onExpand }) {
+  const shown = expanded ? run.items.filter((c) => c.entity_id === expanded) : run.items
+  const grid = run.items.length > 1 && !expanded
   return (
-    <div className="rounded-xl border border-zinc-800 divide-y divide-zinc-800">
-      {ids.map((id, i) => (
-        <div key={id} className="flex items-center gap-2 px-3 py-2">
-          <span className="flex-1 min-w-0 truncate text-sm">{byId[id]?.name || id}</span>
-          {/* Up/down rather than drag: drag is fiddly on a phone and would need
-              a library for no real gain. */}
-          <Button variant="ghost" className="px-3" disabled={i === 0}
-            onClick={() => onMove(i, -1)}>↑</Button>
-          <Button variant="ghost" className="px-3" disabled={i === ids.length - 1}
-            onClick={() => onMove(i, 1)}>↓</Button>
-        </div>
+    <div className={`mb-3 grid gap-3 ${grid ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+      {shown.map((cam) => (
+        <figure key={cam.entity_id} className="m-0">
+          {/* Tap to fill the width. On a phone the grid is tight, and the one
+              worth a proper look is usually the one something is happening on. */}
+          <img
+            alt={cam.name}
+            onClick={() => onExpand(expanded ? null : cam.entity_id)}
+            className="w-full rounded-2xl bg-zinc-900 cursor-pointer"
+            src={`${api.cameraUrl(cam.entity_id)}?t=${frame}`}
+          />
+          <figcaption className="mt-1.5 text-xs text-zinc-500 flex items-center gap-2">
+            <span className="truncate">{cam.name}</span>
+            {cam.missing && <span className="text-amber-300">not reported by Home Assistant</span>}
+            {expanded === cam.entity_id && <span className="ml-auto">tap to show all</span>}
+          </figcaption>
+        </figure>
       ))}
     </div>
   )
 }
 
+function Editor({ draft, setDraft, entities, onSave, onCancel }) {
+  const cameras = entities.filter((e) => e.domain === 'camera')
+  const controls = entities.filter((e) => e.actionable)
+  const chosen = new Set(draft.map((i) => `${i.type}:${i.entity_id}`))
+
+  const add = (type, entity_id) => setDraft([...draft, { type, entity_id }])
+  const remove = (index) => setDraft(draft.filter((_, i) => i !== index))
+  const move = (index, delta) => {
+    const next = [...draft]
+    const to = index + delta
+    if (to < 0 || to >= next.length) return
+    ;[next[index], next[to]] = [next[to], next[index]]
+    setDraft(next)
+  }
+
+  const byId = Object.fromEntries(entities.map((e) => [e.entity_id, e]))
+  const label = (item) => byId[item.entity_id]?.name || item.entity_id
+
+  return (
+    <Card>
+      <Field label="Your page, top to bottom" hint="Put a camera directly above the gate it looks at.">
+        {draft.length === 0 ? (
+          <p className="text-sm text-zinc-500">Nothing yet. Add a camera or a control below.</p>
+        ) : (
+          <div className="rounded-xl border border-zinc-800 divide-y divide-zinc-800">
+            {draft.map((item, i) => (
+              <div key={`${item.type}:${item.entity_id}:${i}`} className="flex items-center gap-2 px-3 py-2">
+                <Pill tone={item.type === 'camera' ? 'amber' : 'green'}>
+                  {item.type === 'camera' ? 'camera' : 'control'}
+                </Pill>
+                <span className="flex-1 min-w-0 truncate text-sm">{label(item)}</span>
+                {/* Up/down rather than drag: drag is fiddly on a phone and would
+                    need a library for no real gain. */}
+                <Button variant="ghost" className="px-3" disabled={i === 0}
+                  onClick={() => move(i, -1)}>↑</Button>
+                <Button variant="ghost" className="px-3" disabled={i === draft.length - 1}
+                  onClick={() => move(i, 1)}>↓</Button>
+                <Button variant="danger" className="px-3" onClick={() => remove(i)}>✕</Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Field>
+
+      <Field label="Add a camera">
+        <select className={input} value=""
+          onChange={(e) => e.target.value && add('camera', e.target.value)}>
+          <option value="">Choose…</option>
+          {cameras.map((c) => (
+            <option key={c.entity_id} value={c.entity_id}
+              disabled={chosen.has(`camera:${c.entity_id}`)}>
+              {c.name}{chosen.has(`camera:${c.entity_id}`) ? ' — already added' : ''}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="Add a control">
+        <select className={input} value=""
+          onChange={(e) => e.target.value && add('control', e.target.value)}>
+          <option value="">Choose…</option>
+          {controls.map((c) => (
+            <option key={c.entity_id} value={c.entity_id}
+              disabled={chosen.has(`control:${c.entity_id}`)}>
+              {c.name}{chosen.has(`control:${c.entity_id}`) ? ' — already added' : ''}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <div className="flex gap-2">
+        <Button onClick={onSave}>Save</Button>
+        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+      </div>
+    </Card>
+  )
+}
+
 export default function ControlTab({ entities, setError }) {
-  const [config, setConfig] = useState(null)
+  const [items, setItems] = useState(null)
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(null)
+  const [draft, setDraft] = useState([])
   const [pending, setPending] = useState(null)
   const [results, setResults] = useState({})
   const [frame, setFrame] = useState(0)
   const [expanded, setExpanded] = useState(null)
 
   const load = useCallback(async () => {
-    try { setConfig(await api.getControl()) } catch (e) { setError(e.message) }
+    try { setItems((await api.getControl()).items) } catch (e) { setError(e.message) }
   }, [setError])
 
   useEffect(() => { load() }, [load])
 
-  // Live state, same cadence as the guest page.
   useEffect(() => {
     if (editing) return
     const t = setInterval(load, POLL_MS)
     return () => clearInterval(t)
   }, [editing, load])
 
-  // Snapshot polling rather than a proxied video stream: one frame a second
-  // answers "who is at the gate" and survives two proxies, which MJPEG does not.
-  // One timer for all cameras, so adding a second does not double the work.
+  // One timer for every camera, so adding another does not multiply the work.
+  const cameraCount = (items || []).filter((i) => i.type === 'camera').length
   useEffect(() => {
-    if (editing || !config?.cameras?.length) return
+    if (editing || !cameraCount) return
     const t = setInterval(() => setFrame((n) => n + 1), FRAME_MS)
     return () => clearInterval(t)
-  }, [editing, config?.cameras?.length])
+  }, [editing, cameraCount])
 
   async function act(entityId, intent) {
     setPending(`${entityId}:${intent}`)
@@ -76,91 +175,41 @@ export default function ControlTab({ entities, setError }) {
     }
   }
 
-  function startEditing() {
-    setDraft({
-      cameras: (config?.cameras || []).map((c) => c.entity_id),
-      entities: (config?.entities || []).map((e) => e.entity_id),
-    })
-    setEditing(true)
-  }
-
-  function move(key, index, delta) {
-    const next = [...draft[key]]
-    const target = index + delta
-    if (target < 0 || target >= next.length) return
-    ;[next[index], next[target]] = [next[target], next[index]]
-    setDraft({ ...draft, [key]: next })
-  }
-
   async function save() {
     setError(null)
     try {
-      await api.saveControl({ cameras: draft.cameras, entities: draft.entities })
+      await api.saveControl({ items: draft })
       setEditing(false)
       await load()
     } catch (e) { setError(e.message) }
   }
 
-  if (!config) return <p className="text-zinc-500">Loading…</p>
+  if (!items) return <p className="text-zinc-500">Loading…</p>
 
   if (editing) {
-    const cameras = entities.filter((e) => e.domain === 'camera')
-    const byId = Object.fromEntries(entities.map((e) => [e.entity_id, e]))
     return (
-      <div className="space-y-4">
-        <Card>
-          <Field label="Cameras" hint="Shown above the controls, in this order. Admin only — never on the guest page.">
-            <EntityPicker
-              entities={cameras}
-              selected={draft.cameras}
-              onChange={(v) => setDraft({ ...draft, cameras: v })}
-            />
-          </Field>
-
-          {draft.cameras.length > 1 && (
-            <Field label="Camera order">
-              <Reorder
-                ids={draft.cameras}
-                byId={byId}
-                onMove={(i, d) => move('cameras', i, d)}
-              />
-            </Field>
-          )}
-
-          <Field label="Controls" hint="Tick to include. Order them below.">
-            <EntityPicker
-              entities={entities.filter((e) => e.actionable)}
-              selected={draft.entities}
-              onChange={(v) => setDraft({ ...draft, entities: v })}
-            />
-          </Field>
-
-          {draft.entities.length > 1 && (
-            <Field label="Control order" hint="The one you use most goes first.">
-              <Reorder
-                ids={draft.entities}
-                byId={byId}
-                onMove={(i, d) => move('entities', i, d)}
-              />
-            </Field>
-          )}
-
-          <div className="flex gap-2">
-            <Button onClick={save}>Save</Button>
-            <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
-          </div>
-        </Card>
-      </div>
+      <Editor
+        draft={draft}
+        setDraft={setDraft}
+        entities={entities}
+        onSave={save}
+        onCancel={() => setEditing(false)}
+      />
     )
   }
 
-  if (!config.entities.length && !config.cameras.length) {
+  const startEditing = () => {
+    setDraft(items.map((i) => ({ type: i.type, entity_id: i.entity_id })))
+    setEditing(true)
+  }
+
+  if (!items.length) {
     return (
       <Card>
         <p className="text-zinc-300 font-medium">Nothing set up yet</p>
         <p className="text-sm text-zinc-500 mt-2">
-          Choose a camera and the controls you want on this page. It is yours only —
-          it is not what a guest sees.
+          Build the page top to bottom — a camera, the gate it looks at, then the
+          next. It is yours only; it is not what a guest sees.
         </p>
         <Button className="mt-4" onClick={startEditing}>Set it up</Button>
       </Card>
@@ -169,46 +218,27 @@ export default function ControlTab({ entities, setError }) {
 
   return (
     <div>
-      {config.cameras.length > 0 && (
-        <div className={`mb-4 grid gap-3 ${
-          config.cameras.length > 1 && !expanded ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'
-        }`}>
-          {(expanded ? config.cameras.filter((c) => c.entity_id === expanded) : config.cameras)
-            .map((cam) => (
-              <figure key={cam.entity_id} className="m-0">
-                {/* Tap to fill the width. With two or more cameras the grid is
-                    tight on a phone, and the one you want a proper look at is
-                    usually the one something is happening on. */}
-                <img
-                  alt={cam.name}
-                  onClick={() => setExpanded(expanded ? null : cam.entity_id)}
-                  className="w-full rounded-2xl bg-zinc-900 cursor-pointer"
-                  src={`${api.cameraUrl(cam.entity_id)}?t=${frame}`}
-                />
-                <figcaption className="mt-1.5 text-xs text-zinc-500 flex items-center gap-2">
-                  <span className="truncate">{cam.name}</span>
-                  {cam.missing && <span className="text-amber-300">not reported by Home Assistant</span>}
-                  {expanded === cam.entity_id && <span className="ml-auto">tap to show all</span>}
-                </figcaption>
-              </figure>
-            ))}
-        </div>
+      {groupRuns(items).map((run, i) =>
+        run.type === 'camera' ? (
+          <CameraRun key={`cams-${i}`} run={run} frame={frame}
+            expanded={expanded} onExpand={setExpanded} />
+        ) : (
+          run.items.map((e) => (
+            <EntityControl
+              key={e.entity_id}
+              entity={e}
+              onAct={act}
+              pending={pending}
+              result={results[e.entity_id]}
+              disabled={e.missing}
+            />
+          ))
+        ),
       )}
 
-      {config.entities.map((e) => (
-        <EntityControl
-          key={e.entity_id}
-          entity={e}
-          onAct={act}
-          pending={pending}
-          result={results[e.entity_id]}
-          disabled={e.missing}
-        />
-      ))}
-
-      {config.entities.some((e) => e.missing) && (
+      {items.some((i) => i.missing) && (
         <p className="text-xs text-amber-300 mb-4">
-          Greyed-out controls are entities Home Assistant no longer reports.
+          Greyed-out blocks are entities Home Assistant no longer reports.
         </p>
       )}
 

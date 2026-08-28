@@ -130,13 +130,23 @@ the same large buttons a visitor gets. It is yours — reached through Home
 Assistant, not through the public hostname — which is why it can show a camera
 when the guest page never does.
 
-Tap **Edit this page** to choose cameras and controls, and order each list with
-the ↑ ↓ buttons. The first control is the one you reach for most.
+Tap **Edit this page** and build it top to bottom. Cameras and controls go in one
+list, so a camera can sit directly above the gate it looks at:
 
-With more than one camera they sit in a grid, two across on a wider screen. Tap
-any of them to fill the width, and tap again to go back — on a phone the grid is
-tight, and the one you want a proper look at is usually the one something is
-happening on.
+```
+Top gate camera
+Top gate          [ Close ] [ Open ] [ Stop ]
+Bottom gate camera
+Bottom gate       [ Close ] [ Open ] [ Stop ]
+```
+
+Order it with the ↑ ↓ buttons and remove a block with ✕. The same camera may
+appear more than once, which is what you want when one view covers two things.
+
+Cameras placed next to each other still sit side by side, two across on a wider
+screen, so "both cameras, then both gates" remains available. Tap any camera to
+fill the width and tap again to go back — on a phone the grid is tight, and the
+one worth a proper look is usually the one something is happening on.
 
 Because Control is the first tab, installing the panel to your home screen opens
 straight into it.

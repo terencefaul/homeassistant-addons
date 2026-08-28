@@ -388,56 +388,89 @@ def test_the_control_page_is_admin_only(ctx):
     assert client.get("/api/admin/control", headers=INGRESS).status_code == 200
 
 
-def test_control_config_round_trips_and_keeps_its_order(ctx):
-    """Order is the list order for both lists, so it must survive verbatim."""
-    client, _, ha = ctx
-    ordered = ["light.porch", "cover.driveway"]
-    client.post("/api/admin/control", headers=INGRESS,
-                json={"cameras": ["camera.gate"], "entities": ordered})
-    body = client.get("/api/admin/control", headers=INGRESS).json()
-    assert [c["entity_id"] for c in body["cameras"]] == ["camera.gate"]
-    assert body["cameras"][0]["name"] == "Gate cam"
-    assert [e["entity_id"] for e in body["entities"]] == ordered
-    assert body["entities"][0]["name"] == "Porch"
-
-
-def test_more_than_one_camera(ctx):
+def test_the_page_is_one_ordered_list_of_blocks(ctx):
+    """Cameras and controls interleave, so a camera can sit directly above the
+    gate it looks at. Order is the list order and must survive verbatim."""
     client, _, _ = ctx
-    pair = ["camera.gate", "camera.drive"]
-    client.post("/api/admin/control", headers=INGRESS,
-                json={"cameras": pair, "entities": []})
-    body = client.get("/api/admin/control", headers=INGRESS).json()
-    assert [c["entity_id"] for c in body["cameras"]] == pair
-    # camera.drive is not in the fake Home Assistant, so it is flagged rather
-    # than dropped -- silently hiding it would look like the setting was lost.
-    assert body["cameras"][1]["missing"] is True
+    layout = [
+        {"type": "camera", "entity_id": "camera.gate"},
+        {"type": "control", "entity_id": "cover.driveway"},
+        {"type": "camera", "entity_id": "camera.drive"},
+        {"type": "control", "entity_id": "light.porch"},
+    ]
+    client.post("/api/admin/control", headers=INGRESS, json={"items": layout})
+    items = client.get("/api/admin/control", headers=INGRESS).json()["items"]
+    assert [(i["type"], i["entity_id"]) for i in items] == [
+        (i["type"], i["entity_id"]) for i in layout
+    ]
+    # Controls carry what it takes to render a control; cameras do not.
+    control = items[1]
+    assert control["intents"] == ["close", "open", "stop"] and control["actionable"]
+    assert control["name"] == "Driveway"
+    assert "intents" not in items[0] and items[0]["name"] == "Gate cam"
 
 
-def test_an_older_single_camera_config_is_lifted_into_the_list(ctx):
-    """Upgrading must not drop a camera someone had already chosen."""
+def test_the_same_camera_can_appear_more_than_once(ctx):
+    """A camera above each of two gates it overlooks is a reasonable layout, so
+    nothing should deduplicate it."""
+    client, _, _ = ctx
+    layout = [
+        {"type": "camera", "entity_id": "camera.gate"},
+        {"type": "control", "entity_id": "cover.driveway"},
+        {"type": "camera", "entity_id": "camera.gate"},
+        {"type": "control", "entity_id": "light.porch"},
+    ]
+    client.post("/api/admin/control", headers=INGRESS, json={"items": layout})
+    items = client.get("/api/admin/control", headers=INGRESS).json()["items"]
+    assert len(items) == 4
+
+
+def test_both_older_config_shapes_are_lifted_forward(ctx):
+    """A dropped setting is indistinguishable from one that never saved, so it
+    would be reported as 'it forgot my cameras' rather than as an upgrade bug."""
     client, store, _ = ctx
+
+    # The first shape: a single camera key.
     store.set_setting("control_page",
                       '{"camera": "camera.gate", "entities": ["cover.driveway"]}')
-    body = client.get("/api/admin/control", headers=INGRESS).json()
-    assert [c["entity_id"] for c in body["cameras"]] == ["camera.gate"]
-    assert [e["entity_id"] for e in body["entities"]] == ["cover.driveway"]
+    items = client.get("/api/admin/control", headers=INGRESS).json()["items"]
+    assert [(i["type"], i["entity_id"]) for i in items] == [
+        ("camera", "camera.gate"), ("control", "cover.driveway"),
+    ]
+
+    # The second: cameras-then-controls.
+    store.set_setting("control_page",
+                      '{"cameras": ["camera.gate"], "entities": ["cover.driveway", "light.porch"]}')
+    items = client.get("/api/admin/control", headers=INGRESS).json()["items"]
+    assert [(i["type"], i["entity_id"]) for i in items] == [
+        ("camera", "camera.gate"),
+        ("control", "cover.driveway"),
+        ("control", "light.porch"),
+    ]
 
 
 def test_control_config_rejects_a_non_camera_and_an_unexposable_entity(ctx):
     client, _, _ = ctx
-    assert client.post("/api/admin/control", headers=INGRESS,
-                       json={"cameras": ["cover.driveway"], "entities": []}).status_code == 400
-    assert client.post("/api/admin/control", headers=INGRESS,
-                       json={"entities": ["climate.lounge"]}).status_code == 400
+    assert client.post("/api/admin/control", headers=INGRESS, json={
+        "items": [{"type": "camera", "entity_id": "cover.driveway"}]
+    }).status_code == 400
+    assert client.post("/api/admin/control", headers=INGRESS, json={
+        "items": [{"type": "control", "entity_id": "climate.lounge"}]
+    }).status_code == 400
+    assert client.post("/api/admin/control", headers=INGRESS, json={
+        "items": [{"type": "wallpaper", "entity_id": "cover.driveway"}]
+    }).status_code == 422
 
 
 def test_an_entity_no_longer_in_home_assistant_is_flagged_not_hidden(ctx):
     """Silently dropping it would look like the page forgot the setting."""
     client, _, _ = ctx
-    client.post("/api/admin/control", headers=INGRESS,
-                json={"cameras": [], "entities": ["cover.driveway", "switch.gone"]})
+    client.post("/api/admin/control", headers=INGRESS, json={"items": [
+        {"type": "control", "entity_id": "cover.driveway"},
+        {"type": "control", "entity_id": "switch.gone"},
+    ]})
     body = client.get("/api/admin/control", headers=INGRESS).json()
-    missing = {e["entity_id"]: e["missing"] for e in body["entities"]}
+    missing = {e["entity_id"]: e["missing"] for e in body["items"]}
     assert missing == {"cover.driveway": False, "switch.gone": True}
 
 
