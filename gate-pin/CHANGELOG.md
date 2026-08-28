@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.6.0] - 2026-08-28
+- More than one camera on the control page, ordered, in a grid
+
 ## [0.5.0] - 2026-08-28
 - Owner control page with a camera, guest page header with logo and property name, working logo upload
 
