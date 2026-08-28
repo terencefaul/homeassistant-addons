@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.7.0] - 2026-08-28
+- Interleave cameras and controls on the control page in any order
+
 ## [0.6.0] - 2026-08-28
 - More than one camera on the control page, ordered, in a grid
 
