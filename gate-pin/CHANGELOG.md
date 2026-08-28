@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.5.0] - 2026-08-28
+- Owner control page with a camera, guest page header with logo and property name, working logo upload
+
 ## [0.4.1] - 2026-08-28
 - Re-issue a credential from Telegram; warn against country and bot rules on the guest hostname
 
