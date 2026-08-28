@@ -20,6 +20,7 @@ STATES = {
     "light.porch": {"state": "off", "attributes": {"friendly_name": "Porch light"}},
     "lock.front": {"state": "locked", "attributes": {"friendly_name": "Front door"}},
     "camera.gate": {"state": "idle", "attributes": {"friendly_name": "Gate camera"}},
+    "camera.drive": {"state": "idle", "attributes": {"friendly_name": "Driveway camera"}},
     "sensor.temperature": {"state": "21.4", "attributes": {"friendly_name": "Outside"}},
     "climate.lounge": {"state": "heat", "attributes": {"friendly_name": "Lounge"}},
     "sun.sun": {"state": "above_horizon", "attributes": {}},

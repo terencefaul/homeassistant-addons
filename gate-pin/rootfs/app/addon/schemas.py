@@ -82,11 +82,11 @@ class BrandingRequest(Strict):
 
 
 class ControlConfigRequest(Strict):
-    """The owner's own control page: a camera and an ordered list of entities.
+    """The owner's own control page: cameras and controls, both ordered.
 
     Order is the list order -- there is no separate sort key to keep in sync."""
 
-    camera: Optional[str] = Field(default=None, max_length=255)
+    cameras: list[str] = Field(default=[], max_length=8)
     entities: list[str] = Field(default=[], max_length=40)
 
 

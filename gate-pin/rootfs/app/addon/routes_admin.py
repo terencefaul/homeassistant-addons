@@ -300,12 +300,22 @@ CONTROL_KEY = "control_page"
 
 
 def _control_config(raw: str) -> dict:
+    """Read the stored page config.
+
+    Accepts the older single-`camera` shape and lifts it into the list, so an
+    upgrade does not silently drop a camera someone had already chosen.
+    """
     try:
         data = json.loads(raw) if raw else {}
     except Exception:
         data = {}
+
+    cameras = [c for c in (data.get("cameras") or []) if isinstance(c, str)]
+    if not cameras and isinstance(data.get("camera"), str) and data["camera"]:
+        cameras = [data["camera"]]
+
     return {
-        "camera": data.get("camera") or None,
+        "cameras": cameras,
         "entities": [e for e in (data.get("entities") or []) if isinstance(e, str)],
     }
 
@@ -327,6 +337,15 @@ async def get_control(request: Request):
     except HAError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    cameras = []
+    for eid in cfg["cameras"]:
+        raw = states.get(eid)
+        cameras.append({
+            "entity_id": eid,
+            "name": ((raw or {}).get("attributes") or {}).get("friendly_name") or eid,
+            "missing": raw is None,
+        })
+
     entities = []
     for eid in cfg["entities"]:
         raw = states.get(eid)
@@ -340,7 +359,7 @@ async def get_control(request: Request):
             "missing": raw is None,
         })
 
-    return {"camera": cfg["camera"], "entities": entities}
+    return {"cameras": cameras, "entities": entities}
 
 
 @router.post("/control")
@@ -349,13 +368,14 @@ async def set_control(body: ControlConfigRequest, request: Request):
     for eid in body.entities:
         if not policy.is_selectable(eid):
             raise HTTPException(status_code=400, detail=f"{eid} cannot be exposed")
-    if body.camera and policy.domain_of(body.camera) != "camera":
-        raise HTTPException(status_code=400, detail="That is not a camera entity")
+    for cam in body.cameras:
+        if policy.domain_of(cam) != "camera":
+            raise HTTPException(status_code=400, detail=f"{cam} is not a camera entity")
     await asyncio.to_thread(
         d.store.set_setting,
         CONTROL_KEY,
         # Order is the list order. No sort key to drift out of sync.
-        json.dumps({"camera": body.camera, "entities": body.entities}),
+        json.dumps({"cameras": body.cameras, "entities": body.entities}),
     )
     return {"ok": True}
 

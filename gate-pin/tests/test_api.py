@@ -389,21 +389,44 @@ def test_the_control_page_is_admin_only(ctx):
 
 
 def test_control_config_round_trips_and_keeps_its_order(ctx):
-    """Order is the list order, so it must survive storage verbatim."""
+    """Order is the list order for both lists, so it must survive verbatim."""
     client, _, ha = ctx
     ordered = ["light.porch", "cover.driveway"]
     client.post("/api/admin/control", headers=INGRESS,
-                json={"camera": "camera.gate", "entities": ordered})
+                json={"cameras": ["camera.gate"], "entities": ordered})
     body = client.get("/api/admin/control", headers=INGRESS).json()
-    assert body["camera"] == "camera.gate"
+    assert [c["entity_id"] for c in body["cameras"]] == ["camera.gate"]
+    assert body["cameras"][0]["name"] == "Gate cam"
     assert [e["entity_id"] for e in body["entities"]] == ordered
     assert body["entities"][0]["name"] == "Porch"
+
+
+def test_more_than_one_camera(ctx):
+    client, _, _ = ctx
+    pair = ["camera.gate", "camera.drive"]
+    client.post("/api/admin/control", headers=INGRESS,
+                json={"cameras": pair, "entities": []})
+    body = client.get("/api/admin/control", headers=INGRESS).json()
+    assert [c["entity_id"] for c in body["cameras"]] == pair
+    # camera.drive is not in the fake Home Assistant, so it is flagged rather
+    # than dropped -- silently hiding it would look like the setting was lost.
+    assert body["cameras"][1]["missing"] is True
+
+
+def test_an_older_single_camera_config_is_lifted_into_the_list(ctx):
+    """Upgrading must not drop a camera someone had already chosen."""
+    client, store, _ = ctx
+    store.set_setting("control_page",
+                      '{"camera": "camera.gate", "entities": ["cover.driveway"]}')
+    body = client.get("/api/admin/control", headers=INGRESS).json()
+    assert [c["entity_id"] for c in body["cameras"]] == ["camera.gate"]
+    assert [e["entity_id"] for e in body["entities"]] == ["cover.driveway"]
 
 
 def test_control_config_rejects_a_non_camera_and_an_unexposable_entity(ctx):
     client, _, _ = ctx
     assert client.post("/api/admin/control", headers=INGRESS,
-                       json={"camera": "cover.driveway", "entities": []}).status_code == 400
+                       json={"cameras": ["cover.driveway"], "entities": []}).status_code == 400
     assert client.post("/api/admin/control", headers=INGRESS,
                        json={"entities": ["climate.lounge"]}).status_code == 400
 
@@ -412,7 +435,7 @@ def test_an_entity_no_longer_in_home_assistant_is_flagged_not_hidden(ctx):
     """Silently dropping it would look like the page forgot the setting."""
     client, _, _ = ctx
     client.post("/api/admin/control", headers=INGRESS,
-                json={"entities": ["cover.driveway", "switch.gone"]})
+                json={"cameras": [], "entities": ["cover.driveway", "switch.gone"]})
     body = client.get("/api/admin/control", headers=INGRESS).json()
     missing = {e["entity_id"]: e["missing"] for e in body["entities"]}
     assert missing == {"cover.driveway": False, "switch.gone": True}
