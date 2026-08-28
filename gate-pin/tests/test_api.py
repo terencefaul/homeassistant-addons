@@ -343,3 +343,142 @@ def test_mint_from_preset(ctx):
     body = client.post("/api/admin/mint-preset", headers=INGRESS, json={"preset_id": "p1"}).json()
     assert body["pin"] is None and body["link"]
     assert body["grant"]["label"] == "plumber"
+
+
+# ---- branding, control page, owner actions --------------------------------
+
+
+def test_minting_without_a_theme_uses_the_branding_default(ctx):
+    """The Branding form wrote default_theme and this path never read it, so
+    every panel-minted grant came out 'dark' regardless. The bot honoured it,
+    which made the two paths disagree."""
+    client, store, _ = ctx
+    client.post("/api/admin/branding", headers=INGRESS,
+                json={"accent": "#2563eb", "default_theme": "warm", "property_name": "Terica"})
+    body = client.post("/api/admin/mint", headers=INGRESS, json={
+        "label": "x", "entities": ["cover.driveway"], "duration_s": 3600,
+    }).json()
+    assert body["grant"]["theme"] == "warm"
+
+    # An explicit theme still wins.
+    body = client.post("/api/admin/mint", headers=INGRESS, json={
+        "label": "x", "entities": ["cover.driveway"], "duration_s": 3600, "theme": "light",
+    }).json()
+    assert body["grant"]["theme"] == "light"
+
+
+def test_guest_branding_carries_the_property_name(ctx):
+    """It is rendered in the guest page header, so it has to reach the public
+    endpoint -- unlike anything else on the branding record."""
+    client, _, _ = ctx
+    client.post("/api/admin/branding", headers=INGRESS,
+                json={"accent": "#2563eb", "default_theme": "dark", "property_name": "Terica"})
+    body = client.get("/api/guest/branding", headers=CF).json()
+    assert body["property_name"] == "Terica"
+    assert set(body) == {"accent", "has_logo", "property_name"}, "no admin data may leak here"
+
+
+def test_the_control_page_is_admin_only(ctx):
+    """It carries a camera, which is exactly what must never reach the public
+    origin."""
+    client, _, _ = ctx
+    assert client.get("/api/admin/control", headers=CF).status_code == 404
+    assert client.post("/api/admin/act", headers=CF,
+                       json={"entity_id": "cover.driveway", "intent": "open"}).status_code == 404
+    assert client.get("/api/admin/control", headers=INGRESS).status_code == 200
+
+
+def test_control_config_round_trips_and_keeps_its_order(ctx):
+    """Order is the list order, so it must survive storage verbatim."""
+    client, _, ha = ctx
+    ordered = ["light.porch", "cover.driveway"]
+    client.post("/api/admin/control", headers=INGRESS,
+                json={"camera": "camera.gate", "entities": ordered})
+    body = client.get("/api/admin/control", headers=INGRESS).json()
+    assert body["camera"] == "camera.gate"
+    assert [e["entity_id"] for e in body["entities"]] == ordered
+    assert body["entities"][0]["name"] == "Porch"
+
+
+def test_control_config_rejects_a_non_camera_and_an_unexposable_entity(ctx):
+    client, _, _ = ctx
+    assert client.post("/api/admin/control", headers=INGRESS,
+                       json={"camera": "cover.driveway", "entities": []}).status_code == 400
+    assert client.post("/api/admin/control", headers=INGRESS,
+                       json={"entities": ["climate.lounge"]}).status_code == 400
+
+
+def test_an_entity_no_longer_in_home_assistant_is_flagged_not_hidden(ctx):
+    """Silently dropping it would look like the page forgot the setting."""
+    client, _, _ = ctx
+    client.post("/api/admin/control", headers=INGRESS,
+                json={"entities": ["cover.driveway", "switch.gone"]})
+    body = client.get("/api/admin/control", headers=INGRESS).json()
+    missing = {e["entity_id"]: e["missing"] for e in body["entities"]}
+    assert missing == {"cover.driveway": False, "switch.gone": True}
+
+
+def test_owner_act_goes_through_the_same_policy_as_a_guest(ctx):
+    """A second path to calling a service must not be the looser one."""
+    client, store, ha = ctx
+    assert client.post("/api/admin/act", headers=INGRESS,
+                       json={"entity_id": "cover.driveway", "intent": "open"}).status_code == 200
+    assert ha.calls == [("cover.driveway", "open")]
+
+    # Locking a lock is refused for the owner exactly as it is for a guest.
+    assert client.post("/api/admin/act", headers=INGRESS,
+                       json={"entity_id": "lock.front", "intent": "lock"}).status_code == 422
+    # A camera is never actuated.
+    assert client.post("/api/admin/act", headers=INGRESS,
+                       json={"entity_id": "camera.gate", "intent": "open"}).status_code == 403
+    # And nothing extra in the body reaches Home Assistant.
+    assert client.post("/api/admin/act", headers=INGRESS,
+                       json={"entity_id": "cover.driveway", "intent": "open",
+                             "service": "homeassistant.restart"}).status_code == 422
+    assert ha.calls == [("cover.driveway", "open")]
+
+
+def test_owner_actions_are_distinguishable_in_the_audit_log(ctx):
+    client, store, ha = ctx
+    client.post("/api/admin/act", headers=INGRESS,
+                json={"entity_id": "cover.driveway", "intent": "open"})
+    events = {e["event"] for e in store.audit()}
+    assert "owner_act" in events and "act" not in events
+
+
+def test_a_dead_gate_reports_differently_for_the_owner_too(ctx):
+    client, store, ha = ctx
+    ha.fail = True
+    resp = client.post("/api/admin/act", headers=INGRESS,
+                       json={"entity_id": "cover.driveway", "intent": "open"})
+    assert resp.status_code == 502
+    assert any(e["event"] == "owner_act_failed" for e in store.audit())
+
+
+def test_the_entity_picker_filter_does_not_narrow_what_a_grant_can_reach(ctx):
+    """picker_domains is a convenience. policy.py is the security boundary, and
+    a grant already holding a filtered-out entity must keep working."""
+    client, store, _ = ctx
+    d = client.app.state.deps
+    d.options.picker_domains = ["cover"]
+
+    listed = {e["entity_id"] for e in client.get("/api/admin/entities", headers=INGRESS).json()["entities"]}
+    assert "cover.driveway" in listed
+    assert "light.porch" not in listed and "camera.gate" not in listed
+
+    r = mint(store, entities=("light.porch",))
+    client.post("/api/guest/redeem", json={"credential": r.pin}, headers=CF)
+    assert client.post("/api/guest/act", headers=CF,
+                       json={"entity_id": "light.porch", "intent": "on"}).status_code == 200
+
+
+def test_the_logo_size_limit_says_the_actual_size(ctx):
+    """The old message named a limit that did not match the code path and gave
+    no clue how far over you were."""
+    client, _, _ = ctx
+    big = b"\x89PNG\r\n\x1a\n" + b"0" * (3 * 1024 * 1024)
+    resp = client.post("/api/admin/branding/logo", headers=INGRESS,
+                       files={"file": ("logo.png", big, "image/png")})
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "3072 KB" in detail and "2048 KB" in detail

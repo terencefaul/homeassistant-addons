@@ -45,7 +45,9 @@ class MintRequest(Strict):
     entities: list[str] = Field(min_length=1, max_length=50)
     duration_s: int = Field(ge=60, le=60 * 60 * 24 * 30)
     starts_in_s: int = Field(default=0, ge=0, le=60 * 60 * 24 * 30)
-    theme: Theme = "dark"
+    # Omitted means "use the branding default". A hardcoded default here is what
+    # made the Branding form's theme setting do nothing on this path.
+    theme: Optional[Theme] = None
     kinds: list[Kind] = Field(default=["pin", "token"], min_length=1, max_length=2)
 
 
@@ -68,10 +70,32 @@ class PresetRequest(Strict):
     name: str = Field(min_length=1, max_length=60)
     entities: list[str] = Field(min_length=1, max_length=50)
     duration_s: int = Field(ge=60, le=60 * 60 * 24 * 30)
-    theme: Theme = "dark"
+    theme: Optional[Theme] = None
     kinds: list[Kind] = Field(default=["pin", "token"], min_length=1, max_length=2)
 
 
 class BrandingRequest(Strict):
     accent: str = Field(default="#22c55e", pattern=r"^#[0-9a-fA-F]{6}$")
     default_theme: Theme = "dark"
+    # Shown in the guest page header, so a visitor sees whose gate this is.
+    property_name: str = Field(default="", max_length=60)
+
+
+class ControlConfigRequest(Strict):
+    """The owner's own control page: a camera and an ordered list of entities.
+
+    Order is the list order -- there is no separate sort key to keep in sync."""
+
+    camera: Optional[str] = Field(default=None, max_length=255)
+    entities: list[str] = Field(default=[], max_length=40)
+
+
+class OwnerActRequest(Strict):
+    """Operating an entity as the owner, from the control page.
+
+    Shaped exactly like the guest ActRequest and resolved through the same
+    policy: this is a second path to calling a service, so it must not become a
+    looser one."""
+
+    entity_id: str = Field(min_length=3, max_length=255)
+    intent: Intent

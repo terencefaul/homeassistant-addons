@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* The shared EntityControl paints from these, so the owner's control page
+   matches the guest page it was modelled on. The admin panel is always dark;
+   only the accent follows branding, set at runtime from the Branding tab. */
+:root {
+  --gp-accent: #22c55e;
+  --gp-card:   #18181b;
+  --gp-border: #27272a;
+  --gp-muted:  #a1a1aa;
+  --gp-fg:     #fafafa;
+}
+
 html, body, #root { height: 100%; }
 body {
   margin: 0;

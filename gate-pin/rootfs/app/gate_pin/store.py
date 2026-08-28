@@ -92,6 +92,8 @@ EVENTS = (
     "revoke",
     "extend",
     "reissue",
+    "owner_act",
+    "owner_act_failed",
     "lockout",
 )
 

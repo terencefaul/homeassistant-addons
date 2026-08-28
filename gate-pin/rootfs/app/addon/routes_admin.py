@@ -12,6 +12,7 @@ other prefix. require_ingress is a second line, not the first.
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
@@ -28,9 +29,11 @@ from . import supervisor
 from .deps import deps, require_ingress
 from .schemas import (
     BrandingRequest,
+    ControlConfigRequest,
     ExtendRequest,
     MintFromPresetRequest,
     MintRequest,
+    OwnerActRequest,
     PresetRequest,
     ReissueRequest,
 )
@@ -39,7 +42,7 @@ router = APIRouter(
     prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_ingress)]
 )
 
-MAX_LOGO_BYTES = 512 * 1024
+MAX_LOGO_BYTES = 2 * 1024 * 1024
 LOGO_TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/svg+xml": ".svg", "image/webp": ".webp"}
 
 
@@ -65,10 +68,15 @@ async def entities(request: Request):
         raw = await d.ha.states()
     except HAError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    # Convenience filter only. policy.is_selectable is still the security
+    # boundary; narrowing this option does not narrow what a grant may reach.
+    allowed = set(d.options.picker_domains or [])
     out = []
     for s in raw:
         eid = s.get("entity_id", "")
         if not policy.is_selectable(eid):
+            continue
+        if allowed and policy.domain_of(eid) not in allowed:
             continue
         out.append(
             {
@@ -86,6 +94,11 @@ async def entities(request: Request):
 
 async def _mint(request: Request, *, label, entities_, duration_s, starts_in_s, theme, kinds):
     d = deps(request)
+    if theme is None:
+        # The same lookup the Telegram bot already does. Without this the
+        # Branding form's theme setting had no effect on panel mints, and the
+        # two paths disagreed.
+        theme = await asyncio.to_thread(d.store.get_setting, "default_theme", "dark")
     start = now() + starts_in_s
     try:
         result = await asyncio.to_thread(
@@ -281,6 +294,108 @@ async def camera_snapshot(entity_id: str, request: Request):
     )
 
 
+# ---- the owner's own control page ----------------------------------------
+
+CONTROL_KEY = "control_page"
+
+
+def _control_config(raw: str) -> dict:
+    try:
+        data = json.loads(raw) if raw else {}
+    except Exception:
+        data = {}
+    return {
+        "camera": data.get("camera") or None,
+        "entities": [e for e in (data.get("entities") or []) if isinstance(e, str)],
+    }
+
+
+@router.get("/control")
+async def get_control(request: Request):
+    """The owner's control page: a camera and an ordered list of entities.
+
+    Behind ingress like everything else here, which is what keeps a live camera
+    feed off the public guest origin.
+    """
+    d = deps(request)
+    cfg = _control_config(await asyncio.to_thread(d.store.get_setting, CONTROL_KEY, ""))
+
+    states: dict[str, dict] = {}
+    try:
+        for raw in await d.ha.states():
+            states[raw.get("entity_id", "")] = raw
+    except HAError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    entities = []
+    for eid in cfg["entities"]:
+        raw = states.get(eid)
+        entities.append({
+            "entity_id": eid,
+            "domain": policy.domain_of(eid),
+            "name": ((raw or {}).get("attributes") or {}).get("friendly_name") or eid,
+            "state": (raw or {}).get("state"),
+            "intents": policy.intents_for(eid),
+            "actionable": policy.is_actionable(eid),
+            "missing": raw is None,
+        })
+
+    return {"camera": cfg["camera"], "entities": entities}
+
+
+@router.post("/control")
+async def set_control(body: ControlConfigRequest, request: Request):
+    d = deps(request)
+    for eid in body.entities:
+        if not policy.is_selectable(eid):
+            raise HTTPException(status_code=400, detail=f"{eid} cannot be exposed")
+    if body.camera and policy.domain_of(body.camera) != "camera":
+        raise HTTPException(status_code=400, detail="That is not a camera entity")
+    await asyncio.to_thread(
+        d.store.set_setting,
+        CONTROL_KEY,
+        # Order is the list order. No sort key to drift out of sync.
+        json.dumps({"camera": body.camera, "entities": body.entities}),
+    )
+    return {"ok": True}
+
+
+@router.post("/act")
+async def owner_act(body: OwnerActRequest, request: Request):
+    """Operate an entity as the owner.
+
+    A second path to calling a Home Assistant service, so it goes through the
+    same policy.resolve_service as the guest path -- it must not be the looser
+    one. It is audited as its own event so owner actions stay distinguishable
+    from a guest's in the log.
+    """
+    d = deps(request)
+    try:
+        domain, service = policy.resolve_service(body.entity_id, body.intent)
+    except policy.PolicyError as exc:
+        await asyncio.to_thread(
+            d.store.log, "denied", entity_id=body.entity_id, detail=f"owner: {exc}"
+        )
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    try:
+        await d.ha.call_intent(body.entity_id, body.intent)
+    except HAError as exc:
+        await asyncio.to_thread(
+            d.store.log,
+            "owner_act_failed",
+            entity_id=body.entity_id,
+            service=f"{domain}.{service}",
+            detail=str(exc)[:300],
+        )
+        raise HTTPException(status_code=502, detail="That didn't respond.") from exc
+
+    await asyncio.to_thread(
+        d.store.log, "owner_act", entity_id=body.entity_id, service=f"{domain}.{service}"
+    )
+    return {"ok": True, "entity_id": body.entity_id, "intent": body.intent}
+
+
 @router.get("/branding")
 async def get_branding(request: Request):
     d = deps(request)
@@ -288,6 +403,8 @@ async def get_branding(request: Request):
         "accent": await asyncio.to_thread(d.store.get_setting, "accent", "#22c55e"),
         "default_theme": await asyncio.to_thread(d.store.get_setting, "default_theme", "dark"),
         "logo": await asyncio.to_thread(d.store.get_setting, "logo", ""),
+        "property_name": await asyncio.to_thread(d.store.get_setting, "property_name", ""),
+        "max_logo_kb": MAX_LOGO_BYTES // 1024,
     }
 
 
@@ -296,6 +413,7 @@ async def set_branding(body: BrandingRequest, request: Request):
     d = deps(request)
     await asyncio.to_thread(d.store.set_setting, "accent", body.accent)
     await asyncio.to_thread(d.store.set_setting, "default_theme", body.default_theme)
+    await asyncio.to_thread(d.store.set_setting, "property_name", body.property_name.strip())
     return {"ok": True}
 
 
@@ -306,7 +424,11 @@ async def upload_logo(request: Request, file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Use a PNG, JPEG, SVG or WebP image")
     data = await file.read()
     if len(data) > MAX_LOGO_BYTES:
-        raise HTTPException(status_code=400, detail="Logo must be under 512 KB")
+        raise HTTPException(
+            status_code=400,
+            detail=f"That image is {len(data) // 1024} KB. The limit is "
+                   f"{MAX_LOGO_BYTES // 1024} KB — scale it down and try again.",
+        )
     ext = LOGO_TYPES[file.content_type]
     target = Path(d.options.branding_dir) / f"logo{ext}"
     target.parent.mkdir(parents=True, exist_ok=True)

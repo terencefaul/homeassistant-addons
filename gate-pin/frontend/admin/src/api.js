@@ -23,6 +23,7 @@ const j = (method, path, payload) =>
   call(path, { method, body: payload === undefined ? undefined : JSON.stringify(payload) })
 
 export const cameraUrl = (entityId) => url(`api/admin/camera/${entityId}/snapshot`)
+export const logoUrl = () => url('api/guest/logo')
 
 export const getEntities = () => call('api/admin/entities')
 export const getGrants = () => call('api/admin/grants')
@@ -47,3 +48,6 @@ export const uploadLogo = (file) => {
 }
 export const deleteLogo = () => j('DELETE', 'api/admin/branding/logo')
 export const getHealth = () => call('api/admin/health')
+export const getControl = () => call('api/admin/control')
+export const saveControl = (payload) => j('POST', 'api/admin/control', payload)
+export const ownerAct = (entity_id, intent) => j('POST', 'api/admin/act', { entity_id, intent })

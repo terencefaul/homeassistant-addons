@@ -40,6 +40,14 @@ options:
   trusted_proxy_cidr: "172.30.32.0/23"
   audit_retention_days: 90
   require_cf_header: true
+  picker_domains:
+    - cover
+    - switch
+    - light
+    - lock
+    - scene
+    - script
+    - camera
 
 schema:
   external_base_url: url
@@ -52,3 +60,5 @@ schema:
   trusted_proxy_cidr: str
   audit_retention_days: int(1,3650)
   require_cf_header: bool
+  picker_domains:
+    - str

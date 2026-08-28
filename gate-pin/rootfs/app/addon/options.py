@@ -22,6 +22,15 @@ class Options:
     trusted_proxy_cidr: str = "172.30.32.0/23"
     audit_retention_days: int = 90
     require_cf_header: bool = True
+    # Which domains the admin entity picker offers. A convenience only: it cuts
+    # the noise when choosing entities. policy.is_selectable remains the
+    # security boundary, and narrowing this does not narrow what an existing
+    # grant may reach.
+    picker_domains: list[str] = field(
+        default_factory=lambda: [
+            "cover", "switch", "light", "lock", "scene", "script", "camera",
+        ]
+    )
 
     @property
     def db_path(self) -> str:

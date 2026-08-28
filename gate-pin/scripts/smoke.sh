@@ -104,10 +104,15 @@ done
 
 echo
 echo "Port split - the admin API must be unreachable from the public port"
-for p in /api/admin/grants /api/admin/health /api/admin/audit /api/; do
+for p in /api/admin/grants /api/admin/health /api/admin/audit /api/admin/control /api/; do
   check "public :8888 $p" 404 "$(code $G$p)"
 done
+# The owner control page carries a camera, and owner actions are a second path
+# to calling a service. Both must be as unreachable here as everything else.
+check "public :8888 POST /api/admin/act" 404 \
+  "$(code -X POST "${J[@]}" "${CF[@]}" -d '{"entity_id":"cover.driveway","intent":"open"}' ${G}/api/admin/act)"
 check "ingress :8099 /api/admin/grants"  200 "$(code "${IN[@]}" ${A}/api/admin/grants)"
+check "ingress :8099 /api/admin/control" 200 "$(code "${IN[@]}" ${A}/api/admin/control)"
 
 echo
 echo "Security headers on the public origin"

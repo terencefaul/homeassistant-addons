@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import * as api from './api.js'
+import ControlTab from './ControlTab.jsx'
 import EntityPicker from './EntityPicker.jsx'
 import { writeToClipboard } from './clipboard.js'
 import QrCode from './QrCode.jsx'
 import { Button, Card, Field, Pill, STATUS_TONE, clock, input, relative } from './ui.jsx'
 
-const TABS = ['Mint', 'Grants', 'Presets', 'Cameras', 'Audit', 'Settings']
+const TABS = ['Control', 'Mint', 'Grants', 'Presets', 'Cameras', 'Audit', 'Settings']
 const DURATIONS = [
   ['15 min', 900], ['1 hour', 3600], ['4 hours', 14400], ['24 hours', 86400], ['7 days', 604800],
 ]
@@ -93,12 +94,12 @@ function MintResult({ result, onDone }) {
   )
 }
 
-function MintTab({ entities, presets, onMinted, setError }) {
+function MintTab({ entities, presets, onMinted, setError, defaultTheme }) {
   const [label, setLabel] = useState('')
   const [selected, setSelected] = useState([])
   const [duration, setDuration] = useState(3600)
   const [startsIn, setStartsIn] = useState(0)
-  const [theme, setTheme] = useState('dark')
+  const [theme, setTheme] = useState(defaultTheme || 'dark')
   const [kinds, setKinds] = useState(['pin', 'token'])
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
@@ -504,23 +505,60 @@ function SettingsTab({ setError }) {
             {THEMES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </Field>
-        <Field label="Logo" hint="Served by the add-on itself, never hotlinked — an outside asset request would carry a link token out in the Referer header.">
-          <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp"
-            onChange={async (e) => {
-              const f = e.target.files?.[0]
-              if (!f) return
-              try { await api.uploadLogo(f); load() } catch (err) { setError(err.message) }
-            }} />
+        <Field label="Property name" hint="Shown in the header of the guest page, so a visitor sees whose gate this is.">
+          <input className={input} maxLength={60} placeholder="e.g. Terica"
+            value={branding.property_name || ''}
+            onChange={(e) => setBranding({ ...branding, property_name: e.target.value })} />
+        </Field>
+
+        <Field
+          label="Logo"
+          hint={`PNG, JPEG, SVG or WebP, up to ${branding.max_logo_kb || 2048} KB. Served by the add-on itself, never hotlinked — an outside asset request would carry a link token out in the Referer header.`}
+        >
           {branding.logo && (
-            <Button variant="danger" className="mt-3"
-              onClick={async () => { try { await api.deleteLogo(); load() } catch (e) { setError(e.message) } }}>
-              Remove logo
-            </Button>
+            <div className="mb-3 rounded-xl bg-zinc-950 border border-zinc-800 p-4 flex items-center justify-center">
+              <img src={api.logoUrl()} alt="Current logo" className="max-h-20" />
+            </div>
           )}
+          <div className="flex flex-wrap gap-2">
+            {/* A bare <input type="file"> is stripped by Tailwind's preflight and
+                is effectively invisible on this background -- which is why there
+                appeared to be no way to upload a logo at all. */}
+            <label className="rounded-xl px-4 min-h-[2.75rem] font-medium transition
+                              bg-zinc-800 text-zinc-100 hover:bg-zinc-700
+                              inline-flex items-center cursor-pointer">
+              {branding.logo ? 'Replace logo' : 'Choose a logo'}
+              <input
+                type="file"
+                className="sr-only"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  if (!f) return
+                  setError(null)
+                  try { await api.uploadLogo(f); await load() }
+                  catch (err) { setError(err.message) }
+                  finally { e.target.value = '' }
+                }}
+              />
+            </label>
+            {branding.logo && (
+              <Button variant="danger"
+                onClick={async () => { try { await api.deleteLogo(); load() } catch (e) { setError(e.message) } }}>
+                Remove
+              </Button>
+            )}
+          </div>
         </Field>
         <Button onClick={async () => {
-          try { await api.saveBranding({ accent: branding.accent, default_theme: branding.default_theme }) }
-          catch (e) { setError(e.message) }
+          try {
+            await api.saveBranding({
+              accent: branding.accent,
+              default_theme: branding.default_theme,
+              property_name: branding.property_name || '',
+            })
+            await load()
+          } catch (e) { setError(e.message) }
         }}>Save branding</Button>
       </Card>
 
@@ -570,16 +608,22 @@ function SettingsTab({ setError }) {
 }
 
 export default function App() {
-  const [tab, setTab] = useState('Mint')
+  const [tab, setTab] = useState('Control')
   const [entities, setEntities] = useState([])
   const [presets, setPresets] = useState([])
   const [grants, setGrants] = useState(null)
   const [error, setError] = useState(null)
+  const [defaultTheme, setDefaultTheme] = useState('dark')
 
   const reload = useCallback(async () => {
     try {
-      const [e, p, g] = await Promise.all([api.getEntities(), api.getPresets(), api.getGrants()])
+      const [e, p, g, b] = await Promise.all([
+        api.getEntities(), api.getPresets(), api.getGrants(), api.getBranding(),
+      ])
       setEntities(e.entities); setPresets(p.presets); setGrants(g)
+      // So the mint form opens on the theme the Branding tab actually says.
+      setDefaultTheme(b.default_theme || 'dark')
+      if (b.accent) document.documentElement.style.setProperty('--gp-accent', b.accent)
     } catch (err) { setError(err.message) }
   }, [])
 
@@ -607,7 +651,8 @@ export default function App() {
 
       <Banner error={error} onClose={() => setError(null)} />
 
-      {tab === 'Mint' && <MintTab entities={entities} presets={presets} onMinted={reload} setError={setError} />}
+      {tab === 'Control' && <ControlTab entities={entities} setError={setError} />}
+      {tab === 'Mint' && <MintTab entities={entities} presets={presets} onMinted={reload} setError={setError} defaultTheme={defaultTheme} />}
       {tab === 'Grants' && <GrantsTab data={grants} reload={reload} setError={setError} />}
       {tab === 'Presets' && <PresetsTab entities={entities} presets={presets} reload={reload} setError={setError} />}
       {tab === 'Cameras' && <CamerasTab entities={entities} />}

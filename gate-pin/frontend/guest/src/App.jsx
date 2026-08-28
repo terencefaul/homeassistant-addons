@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import * as api from './api.js'
+import EntityControl from '../../shared/EntityControl.jsx'
+import BrandHeader from '../../shared/BrandHeader.jsx'
 
 const POLL_MS = 5000
 
@@ -12,12 +14,6 @@ function takeTokenFromUrl() {
   if (!m) return null
   window.history.replaceState(null, '', '/')
   return m[1]
-}
-
-const LABELS = {
-  open: 'Open', close: 'Close', stop: 'Stop',
-  on: 'On', off: 'Off', unlock: 'Unlock',
-  activate: 'Activate', run: 'Run',
 }
 
 function Countdown({ until }) {
@@ -33,62 +29,6 @@ function Countdown({ until }) {
   return <span>{h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`} left</span>
 }
 
-function EntityCard({ entity, onAct, pending, result }) {
-  const isOn = entity.state === 'on' || entity.state === 'open' || entity.state === 'unlocked'
-  return (
-    <div
-      className="rounded-2xl p-4 mb-3"
-      style={{ background: 'var(--gp-card)', border: '1px solid var(--gp-border)' }}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="font-medium text-lg truncate">{entity.name}</p>
-          {entity.state && (
-            <p className="text-sm mt-0.5" style={{ color: 'var(--gp-muted)' }}>
-              <span
-                className="inline-block w-2 h-2 rounded-full mr-2 align-middle"
-                style={{ background: isOn ? 'var(--gp-accent)' : 'var(--gp-muted)' }}
-              />
-              {entity.state}
-            </p>
-          )}
-        </div>
-      </div>
-      {entity.actionable && (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {entity.intents.map((intent) => {
-            const busy = pending === `${entity.entity_id}:${intent}`
-            return (
-              <button
-                key={intent}
-                disabled={!!pending}
-                onClick={() => onAct(entity.entity_id, intent)}
-                /* Big enough for a thumb, in the lower half of the card. */
-                className="flex-1 min-w-[7rem] min-h-[3.5rem] rounded-xl text-lg font-semibold
-                           disabled:opacity-50 active:scale-[0.98] transition"
-                style={{
-                  background: busy ? 'var(--gp-muted)' : 'var(--gp-accent)',
-                  color: '#0b0b0d',
-                }}
-              >
-                {busy ? 'Working…' : LABELS[intent] || intent}
-              </button>
-            )
-          })}
-        </div>
-      )}
-      {result && (
-        <p
-          className="mt-3 text-sm"
-          style={{ color: result.ok ? 'var(--gp-accent)' : '#f87171' }}
-        >
-          {result.message}
-        </p>
-      )}
-    </div>
-  )
-}
-
 export default function App() {
   const [phase, setPhase] = useState('entry') // entry | unlocked
   const [pin, setPin] = useState('')
@@ -99,6 +39,7 @@ export default function App() {
   const [results, setResults] = useState({})
   const [accent, setAccent] = useState(null)
   const [hasLogo, setHasLogo] = useState(false)
+  const [propertyName, setPropertyName] = useState('')
   const autoTried = useRef(false)
 
   useEffect(() => {
@@ -110,7 +51,13 @@ export default function App() {
   }, [accent])
 
   useEffect(() => {
-    api.branding().then((b) => { setAccent(b.accent); setHasLogo(b.has_logo) }).catch(() => {})
+    api.branding()
+      .then((b) => {
+        setAccent(b.accent)
+        setHasLogo(b.has_logo)
+        setPropertyName(b.property_name || '')
+      })
+      .catch(() => {})
   }, [])
 
   const submit = useCallback(async (credential) => {
@@ -179,8 +126,13 @@ export default function App() {
   if (phase === 'unlocked' && grant) {
     return (
       <main className="mx-auto max-w-md px-4 py-6">
+        <BrandHeader
+          logoSrc="/api/guest/logo"
+          hasLogo={hasLogo}
+          propertyName={propertyName}
+          compact
+        />
         <header className="mb-5">
-          {hasLogo && <img src="/api/guest/logo" alt="" className="h-10 mb-3" />}
           <h1 className="text-2xl font-bold">{grant.label || 'Welcome'}</h1>
           <p className="text-sm mt-1" style={{ color: 'var(--gp-muted)' }}>
             <Countdown until={grant.expires_at} />
@@ -188,7 +140,7 @@ export default function App() {
         </header>
         {grant.entities?.length ? (
           grant.entities.map((e) => (
-            <EntityCard
+            <EntityControl
               key={e.entity_id}
               entity={e}
               onAct={onAct}
@@ -205,7 +157,7 @@ export default function App() {
 
   return (
     <main className="mx-auto max-w-md px-6 min-h-full flex flex-col justify-center py-10">
-      {hasLogo && <img src="/api/guest/logo" alt="" className="h-12 mb-6 mx-auto" />}
+      <BrandHeader logoSrc="/api/guest/logo" hasLogo={hasLogo} propertyName={propertyName} />
       <h1 className="text-3xl font-bold text-center">Enter your code</h1>
       <form
         className="mt-8"

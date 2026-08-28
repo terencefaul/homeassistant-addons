@@ -121,6 +121,33 @@ sidebar.
 | `trusted_proxy_cidr` | `172.30.32.0/23` | Where your tunnel connects from. Rate limiting is wrong until this is right. |
 | `audit_retention_days` | `90` | How long activity is kept before pruning. |
 | `require_cf_header` | `true` | Refuse guest requests that did not arrive with Cloudflare's `CF-Connecting-IP`. Leave this on. |
+| `picker_domains` | cover, switch, light, lock, scene, script, camera | Which domains the entity picker offers. A convenience that cuts the noise — it does **not** narrow what a grant may reach, which the server-side policy still governs. |
+
+## Your own control page
+
+The panel opens on **Control**: your camera above the controls you use most, with
+the same large buttons a visitor gets. It is yours — reached through Home
+Assistant, not through the public hostname — which is why it can show a camera
+when the guest page never does.
+
+Tap **Edit this page** to choose a camera, tick the controls, and order them with
+the ↑ ↓ buttons. The first one is the one you reach for most.
+
+Because Control is the first tab, installing the panel to your home screen opens
+straight into it.
+
+## Branding
+
+**Settings → Branding.** Set a **property name** and upload a **logo**, and both
+appear in the header of the guest page, so a visitor sees whose gate they are at
+rather than a generic tool.
+
+The accent colour applies to every button on the guest page. The default theme is
+what new grants start with — you can still override it per grant when minting.
+
+Logos are PNG, JPEG, SVG or WebP up to 2 MB, served by the add-on itself. They
+are never hotlinked: a request to an outside host from the guest page would carry
+the link token out in the `Referer` header.
 
 ## Using it
 

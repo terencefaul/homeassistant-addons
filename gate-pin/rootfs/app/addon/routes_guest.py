@@ -241,4 +241,5 @@ async def branding(request: Request):
     return {
         "accent": await asyncio.to_thread(d.store.get_setting, "accent", "#22c55e"),
         "has_logo": await asyncio.to_thread(d.store.get_setting, "logo", "") != "",
+        "property_name": await asyncio.to_thread(d.store.get_setting, "property_name", ""),
     }
