@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.0] - 2026-09-02
+- Presets choose PIN, link or both; fix guest page logo and button styling
+
 ## [0.7.0] - 2026-08-28
 - Interleave cameras and controls on the control page in any order
 
