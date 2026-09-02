@@ -51,12 +51,6 @@ class MintRequest(Strict):
     kinds: list[Kind] = Field(default=["pin", "token"], min_length=1, max_length=2)
 
 
-class MintFromPresetRequest(Strict):
-    preset_id: str
-    label: str = Field(default="", max_length=120)
-    starts_in_s: int = Field(default=0, ge=0, le=60 * 60 * 24 * 30)
-
-
 class ExtendRequest(Strict):
     additional_s: int = Field(ge=60, le=60 * 60 * 24 * 30)
 

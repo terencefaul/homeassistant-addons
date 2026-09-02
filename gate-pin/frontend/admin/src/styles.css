@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Tailwind v4 detects sources from the Vite root, which is this app's folder --
+   so frontend/shared/ is invisible to it and every class used ONLY there gets
+   purged. That shipped a guest page with a full-size logo and buttons with no
+   height or gaps. tests/test_frontend_build.py asserts the built CSS still
+   carries a shared-only class. */
+@source "../../shared";
+
 /* The shared EntityControl paints from these, so the owner's control page
    matches the guest page it was modelled on. The admin panel is always dark;
    only the accent follows branding, set at runtime from the Branding tab. */

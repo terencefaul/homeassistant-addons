@@ -31,7 +31,6 @@ from .schemas import (
     BrandingRequest,
     ControlConfigRequest,
     ExtendRequest,
-    MintFromPresetRequest,
     MintRequest,
     OwnerActRequest,
     PresetRequest,
@@ -139,24 +138,6 @@ async def mint(body: MintRequest, request: Request):
     )
 
 
-@router.post("/mint-preset")
-async def mint_preset(body: MintFromPresetRequest, request: Request):
-    d = deps(request)
-    presets = await asyncio.to_thread(d.store.list_presets)
-    preset = next((p for p in presets if p["id"] == body.preset_id), None)
-    if preset is None:
-        raise HTTPException(status_code=404, detail="No such preset")
-    return await _mint(
-        request,
-        label=body.label or preset["name"],
-        entities_=preset["entities"],
-        duration_s=preset["duration_s"],
-        starts_in_s=body.starts_in_s,
-        theme=preset["theme"],
-        kinds=preset["kinds"],
-    )
-
-
 @router.get("/grants")
 async def list_grants(request: Request):
     d = deps(request)
@@ -243,13 +224,16 @@ async def save_preset(body: PresetRequest, request: Request):
     for e in body.entities:
         if not policy.is_selectable(e):
             raise HTTPException(status_code=400, detail=f"{e} cannot be exposed")
+    theme = body.theme or await asyncio.to_thread(
+        d.store.get_setting, "default_theme", "dark"
+    )
     await asyncio.to_thread(
         d.store.upsert_preset,
         preset_id=body.id or generate_id(),
         name=body.name,
         entities=body.entities,
         duration_s=body.duration_s,
-        theme=body.theme,
+        theme=theme,
         kinds=body.kinds,
     )
     return {"presets": await asyncio.to_thread(d.store.list_presets)}

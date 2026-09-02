@@ -95,6 +95,25 @@ def test_menu_shows_a_button_per_preset(bot):
     assert any("Live grants" == l for l in labels)
 
 
+def test_menu_and_presets_name_the_credentials_a_preset_will_mint(bot):
+    """A one-tap button that mints a link only should say so before it is
+    tapped -- the tap is the commitment, there is no confirmation step."""
+    b, store, tg = bot
+    store.upsert_preset(
+        preset_id="p2", name="courier", entities=["cover.driveway"],
+        duration_s=3600, theme="dark", kinds=["token"],
+    )
+    run(b._handle(msg(ALLOWED, "/menu")))
+    keyboard = tg.sent[0]["reply_markup"]["inline_keyboard"]
+    labels = [btn["text"] for row in keyboard for btn in row]
+    assert any("courier" in l and "link" in l and "PIN" not in l for l in labels)
+    assert any("plumber" in l and "PIN + link" in l for l in labels)
+
+    run(b._handle(msg(ALLOWED, "/presets")))
+    listing = tg.sent[-1]["text"]
+    assert "PIN + link" in listing and "link" in listing
+
+
 def test_menu_without_presets_says_so_rather_than_showing_nothing(bot):
     b, store, tg = bot
     store.delete_preset("p1")

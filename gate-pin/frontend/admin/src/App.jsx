@@ -4,13 +4,12 @@ import ControlTab from './ControlTab.jsx'
 import EntityPicker from './EntityPicker.jsx'
 import { writeToClipboard } from './clipboard.js'
 import QrCode from './QrCode.jsx'
-import { Button, Card, Field, Pill, STATUS_TONE, clock, input, relative } from './ui.jsx'
+import { Button, Card, Field, KindPicker, Pill, STATUS_TONE, ThemeSelect, clock, input, kindsLabel, relative } from './ui.jsx'
 
 const TABS = ['Control', 'Mint', 'Grants', 'Presets', 'Cameras', 'Audit', 'Settings']
 const DURATIONS = [
   ['15 min', 900], ['1 hour', 3600], ['4 hours', 14400], ['24 hours', 86400], ['7 days', 604800],
 ]
-const THEMES = ['dark', 'light', 'contrast', 'warm']
 
 function Banner({ error, onClose }) {
   if (!error) return null
@@ -104,13 +103,18 @@ function MintTab({ entities, presets, onMinted, setError, defaultTheme }) {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
 
-  const toggleKind = (k) =>
-    setKinds(kinds.includes(k) ? kinds.filter((x) => x !== k) : [...kinds, k])
+  /** Tapping a preset fills this form rather than minting, so the label,
+   *  duration, credentials and start can all be changed for one mint without
+   *  editing -- or duplicating -- the preset itself. */
+  const fillFrom = (p) => {
+    setLabel(p.name); setSelected(p.entities); setDuration(p.duration_s)
+    setTheme(p.theme); setKinds(p.kinds); setStartsIn(0)
+  }
 
-  async function submit(payload, fn) {
+  async function submit(payload) {
     setBusy(true); setError(null)
     try {
-      setResult(await fn(payload))
+      setResult(await api.mint(payload))
       onMinted()
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
@@ -121,16 +125,14 @@ function MintTab({ entities, presets, onMinted, setError, defaultTheme }) {
     <div className="space-y-4">
       {presets.length > 0 && (
         <Card>
-          <p className="text-sm font-medium text-zinc-300 mb-3">Mint from a preset</p>
+          <p className="text-sm font-medium text-zinc-300">Start from a preset</p>
+          <p className="text-xs text-zinc-500 mt-1 mb-3">
+            Fills the form below — everything stays editable before you mint.
+          </p>
           <div className="flex flex-wrap gap-2">
             {presets.map((p) => (
-              <Button
-                key={p.id}
-                variant="ghost"
-                disabled={busy}
-                onClick={() => submit({ preset_id: p.id, starts_in_s: 0 }, api.mintPreset)}
-              >
-                {p.name} · {relative(p.duration_s)}
+              <Button key={p.id} variant="ghost" disabled={busy} onClick={() => fillFrom(p)}>
+                {p.name} · {relative(p.duration_s)} · {kindsLabel(p.kinds)}
               </Button>
             ))}
           </div>
@@ -166,16 +168,11 @@ function MintTab({ entities, presets, onMinted, setError, defaultTheme }) {
         </Field>
 
         <Field label="Credentials">
-          <div className="flex gap-2">
-            <Button variant={kinds.includes('pin') ? 'primary' : 'ghost'} onClick={() => toggleKind('pin')}>PIN</Button>
-            <Button variant={kinds.includes('token') ? 'primary' : 'ghost'} onClick={() => toggleKind('token')}>Link</Button>
-          </div>
+          <KindPicker value={kinds} onChange={setKinds} />
         </Field>
 
         <Field label="Guest page theme">
-          <select className={input} value={theme} onChange={(e) => setTheme(e.target.value)}>
-            {THEMES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <ThemeSelect value={theme} onChange={setTheme} />
         </Field>
 
         <Button
@@ -183,7 +180,6 @@ function MintTab({ entities, presets, onMinted, setError, defaultTheme }) {
           disabled={busy || !selected.length || !kinds.length}
           onClick={() => submit(
             { label, entities: selected, duration_s: duration, starts_in_s: startsIn, theme, kinds },
-            api.mint,
           )}
         >
           {busy ? 'Minting…' : 'Mint credential'}
@@ -232,7 +228,7 @@ function GrantsTab({ data, reload, setError }) {
           : g.status === 'active'
             ? `${relative(g.valid_until - now)} left · until ${clock(g.valid_until)}`
             : clock(g.valid_until)}
-        {' · '}{g.kinds.join(' + ') || 'no credentials'}
+        {' · '}{kindsLabel(g.kinds) || 'no credentials'}
       </p>
       {['active', 'scheduled'].includes(g.status) && (
         <div className="flex flex-wrap gap-2 mt-4">
@@ -285,9 +281,14 @@ function GrantsTab({ data, reload, setError }) {
   )
 }
 
-function PresetsTab({ entities, presets, reload, setError }) {
+function PresetsTab({ entities, presets, reload, setError, defaultTheme }) {
   const [draft, setDraft] = useState(null)
-  const blank = { name: '', entities: [], duration_s: 3600, theme: 'dark', kinds: ['pin', 'token'] }
+  // A new preset opens on the theme the Branding tab actually says, the same
+  // way the mint form does -- a hardcoded 'dark' here made that setting a lie.
+  const blank = {
+    name: '', entities: [], duration_s: 3600,
+    theme: defaultTheme || 'dark', kinds: ['pin', 'token'],
+  }
 
   async function save() {
     setError(null)
@@ -302,7 +303,7 @@ function PresetsTab({ entities, presets, reload, setError }) {
             <div className="min-w-0">
               <p className="font-medium">{p.name}</p>
               <p className="text-sm text-zinc-400 mt-1 break-words">{p.entities.join(', ')}</p>
-              <p className="text-sm text-zinc-500 mt-1">{relative(p.duration_s)} · {p.kinds.join(' + ')} · {p.theme}</p>
+              <p className="text-sm text-zinc-500 mt-1">{relative(p.duration_s)} · {kindsLabel(p.kinds)} · {p.theme}</p>
             </div>
           </div>
           <div className="flex gap-2 mt-4">
@@ -329,8 +330,14 @@ function PresetsTab({ entities, presets, reload, setError }) {
               ))}
             </div>
           </Field>
+          <Field label="Credentials" hint="What one tap on this preset mints — here and from the Telegram menu.">
+            <KindPicker value={draft.kinds} onChange={(v) => setDraft({ ...draft, kinds: v })} />
+          </Field>
+          <Field label="Guest page theme">
+            <ThemeSelect value={draft.theme} onChange={(v) => setDraft({ ...draft, theme: v })} />
+          </Field>
           <div className="flex gap-2">
-            <Button onClick={save} disabled={!draft.name || !draft.entities.length}>Save preset</Button>
+            <Button onClick={save} disabled={!draft.name || !draft.entities.length || !draft.kinds.length}>Save preset</Button>
             <Button variant="ghost" onClick={() => setDraft(null)}>Cancel</Button>
           </div>
         </Card>
@@ -500,10 +507,10 @@ function SettingsTab({ setError }) {
           </div>
         </Field>
         <Field label="Default theme">
-          <select className={input} value={branding.default_theme}
-            onChange={(e) => setBranding({ ...branding, default_theme: e.target.value })}>
-            {THEMES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <ThemeSelect
+            value={branding.default_theme}
+            onChange={(v) => setBranding({ ...branding, default_theme: v })}
+          />
         </Field>
         <Field label="Property name" hint="Shown in the header of the guest page, so a visitor sees whose gate this is.">
           <input className={input} maxLength={60} placeholder="e.g. Terica"
@@ -654,7 +661,7 @@ export default function App() {
       {tab === 'Control' && <ControlTab entities={entities} setError={setError} />}
       {tab === 'Mint' && <MintTab entities={entities} presets={presets} onMinted={reload} setError={setError} defaultTheme={defaultTheme} />}
       {tab === 'Grants' && <GrantsTab data={grants} reload={reload} setError={setError} />}
-      {tab === 'Presets' && <PresetsTab entities={entities} presets={presets} reload={reload} setError={setError} />}
+      {tab === 'Presets' && <PresetsTab entities={entities} presets={presets} reload={reload} setError={setError} defaultTheme={defaultTheme} />}
       {tab === 'Cameras' && <CamerasTab entities={entities} />}
       {tab === 'Audit' && <AuditTab setError={setError} />}
       {tab === 'Settings' && <SettingsTab setError={setError} />}

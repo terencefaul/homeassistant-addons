@@ -336,13 +336,32 @@ def test_reissue_revocation_still_kills_every_credential(ctx):
     assert client.post("/api/guest/redeem", json={"credential": body["pin"]}, headers=CF).status_code == 401
 
 
-def test_mint_from_preset(ctx):
+def test_a_preset_keeps_the_credentials_and_theme_it_was_saved_with(ctx):
+    """The panel offers link-only presets, so the round trip has to preserve
+    kinds -- a preset silently widened back to pin+token hands out a PIN the
+    owner did not mean to create."""
     client, store, _ = ctx
-    store.upsert_preset(preset_id="p1", name="plumber", entities=["cover.driveway"],
-                        duration_s=7200, theme="dark", kinds=["token"])
-    body = client.post("/api/admin/mint-preset", headers=INGRESS, json={"preset_id": "p1"}).json()
-    assert body["pin"] is None and body["link"]
-    assert body["grant"]["label"] == "plumber"
+    payload = {"name": "plumber", "entities": ["cover.driveway"], "duration_s": 7200,
+               "theme": "warm", "kinds": ["token"]}
+    assert client.post("/api/admin/presets", headers=INGRESS, json=payload).status_code == 200
+    preset = client.get("/api/admin/presets", headers=INGRESS).json()["presets"][0]
+    assert preset["kinds"] == ["token"] and preset["theme"] == "warm"
+
+    # And minting from it produces a link and no PIN.
+    r = g.mint(store, label=preset["name"], entities=preset["entities"],
+               valid_from=now(), valid_until=now() + preset["duration_s"],
+               theme=preset["theme"], kinds=preset["kinds"])
+    assert r.pin is None and r.token
+
+
+def test_a_preset_saved_without_a_theme_takes_the_branding_default(ctx):
+    """presets.theme is NOT NULL. Passing the model's None straight through
+    was a 500 waiting for the first client that omitted the field."""
+    client, store, _ = ctx
+    store.set_setting("default_theme", "contrast")
+    payload = {"name": "plumber", "entities": ["cover.driveway"], "duration_s": 7200}
+    assert client.post("/api/admin/presets", headers=INGRESS, json=payload).status_code == 200
+    assert client.get("/api/admin/presets", headers=INGRESS).json()["presets"][0]["theme"] == "contrast"
 
 
 # ---- branding, control page, owner actions --------------------------------

@@ -122,3 +122,36 @@ def test_admin_asset_paths_are_relative():
     assert not absolute, (
         f"admin assets must be relative to survive the ingress prefix: {absolute}"
     )
+
+
+# ---- Tailwind sees frontend/shared/ ---------------------------------------
+#
+# The Vite root is each app's own folder, so Tailwind v4's automatic source
+# detection never reaches ../shared -- and silently purged every class used
+# only there. The guest page shipped with a full-size logo and buttons with no
+# height or gaps, and nothing failed. Both halves are asserted: the @source
+# directive that fixes it, and the built CSS that proves it worked.
+
+SHARED_ONLY = {
+    # BrandHeader's logo. Without it the logo renders at its natural size.
+    "h-14": r".h-14",
+    # EntityControl's action button. Without it the buttons collapse into a run.
+    "min-h-[3.5rem]": r".min-h-\[3\.5rem\]",
+}
+
+
+@pytest.mark.parametrize("app", ["guest", "admin"])
+def test_stylesheet_declares_the_shared_component_folder_as_a_source(app):
+    css = (FRONTEND / app / "src" / "styles.css").read_text()
+    assert "@source" in css and "shared" in css
+
+
+@pytest.mark.parametrize("app", ["guest", "admin"])
+def test_built_css_kept_the_classes_only_shared_components_use(app):
+    if not (DIST / app).exists():
+        pytest.skip("frontend not built")
+    sheets = list((DIST / app / "assets").glob("*.css"))
+    assert sheets, f"no stylesheet in dist/{app}"
+    text = "\n".join(p.read_text() for p in sheets)
+    missing = [name for name, selector in SHARED_ONLY.items() if selector not in text]
+    assert not missing, f"purged from the {app} bundle: {missing}"

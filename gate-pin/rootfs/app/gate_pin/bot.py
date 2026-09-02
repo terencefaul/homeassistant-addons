@@ -277,7 +277,12 @@ class TelegramBot:
 
         rows, row = [], []
         for pre in presets[:12]:
-            row.append((f"{pre['name']} · {humanise(pre['duration_s'])}", f"m:{pre['id']}"))
+            row.append(
+                (
+                    f"{pre['name']} · {humanise(pre['duration_s'])} · {_kinds(pre['kinds'])}",
+                    f"m:{pre['id']}",
+                )
+            )
             if len(row) == 2:
                 rows.append(row); row = []
         if row:
@@ -519,10 +524,16 @@ class TelegramBot:
             chat_id,
             "\n".join(
                 f"<code>{html.escape(p['name'])}</code> · {humanise(p['duration_s'])} · "
-                f"{html.escape(', '.join(p['entities']))}"
+                f"{_kinds(p['kinds'])} · {html.escape(', '.join(p['entities']))}"
                 for p in presets
             ),
         )
+
+
+def _kinds(kinds: Sequence[str]) -> str:
+    """What a preset will hand you, in the words the messages already use --
+    a menu button that mints a link only should say so before it is tapped."""
+    return " + ".join("PIN" if k == "pin" else "link" for k in kinds) or "nothing"
 
 
 def _clock(epoch: int) -> str:

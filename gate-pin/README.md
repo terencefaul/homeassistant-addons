@@ -12,7 +12,8 @@ Assistant shows in the add-on's Documentation tab.
 - Mint a credential for chosen entities, for a set window, starting now or later
 - Choose a PIN, a link, or both. The result screen shows them once, with a QR
 - A mobile-first guest page: live entity state, one large button each
-- Saved presets, so `/new plumber` is the whole command
+- Saved presets carrying their own entities, duration, theme and credentials,
+  so `/new plumber` is the whole command
 - Telegram bot to mint, list, extend and revoke from your phone
 - Audit log of every redemption, action, refusal and wrong code
 - Rate limiting, a live-PIN cap, and a lockout that alerts you

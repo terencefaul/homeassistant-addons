@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Tailwind v4 detects sources from the Vite root, which is this app's folder --
+   so frontend/shared/ is invisible to it and every class used ONLY there gets
+   purged. That shipped a guest page with a full-size logo and buttons with no
+   height or gaps. tests/test_frontend_build.py asserts the built CSS still
+   carries a shared-only class. */
+@source "../../shared";
+
 /* Themes are chosen per grant. All self-hosted -- no font or asset is ever
    fetched from another host, because that request would carry the link token
    out in the Referer header. */

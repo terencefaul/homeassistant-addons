@@ -29,6 +29,34 @@ export const Field = ({ label, hint, children }) => (
 export const input =
   'w-full rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2.5 text-zinc-100 outline-none focus:border-emerald-500'
 
+export const THEMES = ['dark', 'light', 'contrast', 'warm']
+
+/** The PIN / link choice. Shared by the Mint form and the preset editor so the
+ *  two cannot drift -- a preset that mints something the Mint tab cannot is a
+ *  bug nobody would think to look for. */
+export const KindPicker = ({ value, onChange }) => {
+  const toggle = (k) =>
+    onChange(value.includes(k) ? value.filter((x) => x !== k) : [...value, k])
+  return (
+    <div className="flex gap-2">
+      <Button variant={value.includes('pin') ? 'primary' : 'ghost'} onClick={() => toggle('pin')}>PIN</Button>
+      <Button variant={value.includes('token') ? 'primary' : 'ghost'} onClick={() => toggle('token')}>Link</Button>
+    </div>
+  )
+}
+
+/** 'pin' and 'token' are what the API calls them; PIN and link are what the
+ *  buttons, the guest page and Telegram call them. Read-only summaries use
+ *  this so the panel does not speak both languages at once. */
+export const kindsLabel = (kinds) =>
+  kinds.map((k) => (k === 'pin' ? 'PIN' : 'link')).join(' + ')
+
+export const ThemeSelect = ({ value, onChange }) => (
+  <select className={input} value={value} onChange={(e) => onChange(e.target.value)}>
+    {THEMES.map((t) => <option key={t} value={t}>{t}</option>)}
+  </select>
+)
+
 export const Pill = ({ tone = 'zinc', children }) => {
   const tones = {
     zinc: 'bg-zinc-800 text-zinc-300',

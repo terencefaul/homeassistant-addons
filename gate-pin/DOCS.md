@@ -170,9 +170,17 @@ the link token out in the `Referer` header.
 presets, an optional later start, a theme, and a choice of PIN, link, or both.
 The result screen shows the PIN, the link, and a scannable QR — **once**.
 
+**Presets.** A preset is a whole mint saved under a name: the entities, how long
+it lasts, the guest page theme, and **which credentials it produces** — PIN,
+link, or both. A courier who only ever gets a link you tap and forward; a plumber
+you read a PIN to over the phone. Tapping a preset on the Mint tab fills the form
+rather than minting, so anything can be changed for that one visitor without
+editing the preset.
+
 **From Telegram.** Send `/menu` and you get a button per saved preset — one tap
-mints. Typing entity ids one-handed at a gate is the interface this replaces, so
-**create your presets first** in the panel; the menu is built from them.
+mints, and the button says what it will produce. Typing entity ids one-handed at
+a gate is the interface this replaces, so **create your presets first** in the
+panel; the menu is built from them.
 
 The reply carries **+1 hour** and **Revoke** buttons for that grant. `/list`
 gives **New link**, **New PIN** and **Revoke** per live grant, so you can
