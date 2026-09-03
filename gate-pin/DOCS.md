@@ -193,10 +193,16 @@ Typed commands still work, and are better when you want something ad hoc:
 /new 2h cover.driveway          mint a grant
 /new plumber                    mint from a saved preset
 /new 2h cover.driveway --token-only
+/new plumber --in 3h            start later, not now
 /list                           live grants
 /revoke <id>                    kill a grant now
 /extend <id> 1h                 push out a live grant
 ```
+
+`--in` takes the same durations as everything else — `90m`, `3h`, `2d` — and
+`--in=3h` works too, for when the command was pasted rather than typed. The
+reply says when the code starts instead of when it ends, because a scheduled
+code handed over without that reads as a broken one.
 
 The PIN and the link arrive as **separate messages**, so forwarding the link to
 a visitor does not also forward the PIN.
@@ -209,6 +215,17 @@ and one large button each. When the window closes, both credentials stop working
 nothing useful to type, and a link-only guest has no code to type. They get your
 logo, a countdown, and the window it opens in. When the countdown reaches zero
 the page lets itself in, so nobody has to be watching.
+
+**An expired or cancelled code** gets the same treatment: your logo, which of
+the two it is, and when it ran out — so the visitor can say something useful to
+whoever sent it rather than staring at a code box that will never work. A
+cancelled code is not given an end time to come back for, because the one it
+carries is the window it would have had. Every one of these screens offers
+*Enter a code instead*, for a visitor who has a PIN as well as the link.
+
+None of this applies to a code that is simply wrong. That gets the message and
+nothing else — a wrong code must never answer questions about which grants
+exist.
 
 ## Things worth understanding
 

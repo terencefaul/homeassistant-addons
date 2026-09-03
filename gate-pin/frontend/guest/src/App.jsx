@@ -61,8 +61,8 @@ function Countdown({ until, skew }) {
  * to show the code box -- a link-only guest has no code to give it. They are
  * shown the wait instead, and the moment it reaches zero the credential is
  * tried again on its own, so nobody has to notice and tap. */
-function ScheduledScreen({ schedule, skew, busy, onStart, brand }) {
-  const left = useCountdown(schedule.starts_at, skew)
+function ScheduledScreen({ status, skew, busy, onStart, onEnterCode, brand }) {
+  const left = useCountdown(status.starts_at, skew)
   const fired = useRef(false)
 
   useEffect(() => {
@@ -74,7 +74,7 @@ function ScheduledScreen({ schedule, skew, busy, onStart, brand }) {
   return (
     <main className="mx-auto max-w-md px-6 min-h-full flex flex-col justify-center py-10 text-center">
       <BrandHeader {...brand} />
-      <h1 className="text-3xl font-bold">{schedule.label || 'Guest access'}</h1>
+      <h1 className="text-3xl font-bold">{status.label || 'Guest access'}</h1>
       <p className="mt-2 text-base" style={{ color: 'var(--gp-muted)' }}>
         This code isn&rsquo;t active yet.
       </p>
@@ -91,20 +91,73 @@ function ScheduledScreen({ schedule, skew, busy, onStart, brand }) {
         style={{ background: 'var(--gp-card)', border: '1px solid var(--gp-border)' }}
       >
         <p style={{ color: 'var(--gp-muted)' }}>Active from</p>
-        <p className="mt-0.5 text-base font-medium">{clock(schedule.starts_at)}</p>
+        <p className="mt-0.5 text-base font-medium">{clock(status.starts_at)}</p>
         <p className="mt-3" style={{ color: 'var(--gp-muted)' }}>Until</p>
-        <p className="mt-0.5 text-base font-medium">{clock(schedule.expires_at)}</p>
+        <p className="mt-0.5 text-base font-medium">{clock(status.expires_at)}</p>
       </div>
 
       <p className="mt-6 text-sm" style={{ color: 'var(--gp-muted)' }}>
         Keep this page open — it opens by itself when the time comes.
       </p>
+      <EnterCodeInstead onClick={onEnterCode} />
     </main>
   )
 }
 
+/* An expired or cancelled credential.
+ *
+ * Same reasoning as the wait: whoever followed the link holds something real
+ * and has nothing to type, so the code box is not an answer -- it is the
+ * question restated. Telling them which of the two it is, and when it was
+ * good, is what lets them say something useful to whoever sent it. */
+function ClosedScreen({ status, message, onEnterCode, brand }) {
+  const revoked = status.outcome === 'revoked'
+  return (
+    <main className="mx-auto max-w-md px-6 min-h-full flex flex-col justify-center py-10 text-center">
+      <BrandHeader {...brand} />
+      <h1 className="text-3xl font-bold">{status.label || 'Guest access'}</h1>
+
+      <p className="mt-8 text-2xl font-semibold" style={{ color: '#f87171' }}>
+        {revoked ? 'Cancelled' : 'Expired'}
+      </p>
+      <p className="mt-2 text-base" style={{ color: 'var(--gp-muted)' }}>{message}</p>
+
+      {/* A revoked grant's end time is the one it WOULD have had, so the
+          server does not send it and there is nothing honest to show. */}
+      {!revoked && status.expires_at && (
+        <div
+          className="mt-8 rounded-2xl p-4 text-sm"
+          style={{ background: 'var(--gp-card)', border: '1px solid var(--gp-border)' }}
+        >
+          <p style={{ color: 'var(--gp-muted)' }}>Was active until</p>
+          <p className="mt-0.5 text-base font-medium">{clock(status.expires_at)}</p>
+        </div>
+      )}
+
+      <p className="mt-6 text-sm" style={{ color: 'var(--gp-muted)' }}>
+        Ask whoever sent this for a new code.
+      </p>
+      <EnterCodeInstead onClick={onEnterCode} />
+    </main>
+  )
+}
+
+/* Always offered: a visitor may hold a PIN as well as the link they followed,
+   and the takeover must never be a dead end. */
+function EnterCodeInstead({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="mt-8 mx-auto text-sm underline underline-offset-4"
+      style={{ color: 'var(--gp-muted)' }}
+    >
+      Enter a code instead
+    </button>
+  )
+}
+
 export default function App() {
-  const [phase, setPhase] = useState('entry') // entry | scheduled | unlocked
+  const [phase, setPhase] = useState('entry') // entry | scheduled | closed | unlocked
   const [pin, setPin] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -114,7 +167,7 @@ export default function App() {
   const [accent, setAccent] = useState(null)
   const [hasLogo, setHasLogo] = useState(false)
   const [propertyName, setPropertyName] = useState('')
-  const [schedule, setSchedule] = useState(null)
+  const [status, setStatus] = useState(null)
   // The server's clock minus this device's, from the last answer it gave.
   const [skew, setSkew] = useState(0)
   // Kept only in memory, only to retry when the window opens -- it is the same
@@ -124,9 +177,9 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute(
-      'data-theme', grant?.theme || schedule?.theme || 'dark',
+      'data-theme', grant?.theme || status?.theme || 'dark',
     )
-  }, [grant, schedule])
+  }, [grant, status])
 
   useEffect(() => {
     if (accent) document.documentElement.style.setProperty('--gp-accent', accent)
@@ -152,26 +205,26 @@ export default function App() {
       const data = await api.redeem(credential)
       anchor(data.now)
       setGrant(data)
-      setSchedule(null)
+      setStatus(null)
       waiting.current = null
       setPhase('unlocked')
       setPin('')
     } catch (e) {
-      if (e.schedule) {
-        /* Valid, just early. There is nothing useful to type -- a link-only
-           guest has no code at all -- so the wait replaces the code box. */
-        anchor(e.schedule.now)
-        waiting.current = credential
-        setSchedule(e.schedule)
-        setPhase('scheduled')
+      /* The credential resolved but cannot be used: too early, too late, or
+         called off. Whoever followed a link has nothing to type, so the reason
+         replaces the code box rather than sitting under it. */
+      if (e.grantStatus) {
+        anchor(e.grantStatus.now)
+        waiting.current = e.grantStatus.outcome === 'scheduled' ? credential : null
+        setStatus({ ...e.grantStatus, message: e.message })
+        setPhase(e.grantStatus.outcome === 'scheduled' ? 'scheduled' : 'closed')
         setPin('')
         return
       }
-      /* Every other outcome has its own message from the server -- wrong code,
-         expired, cancelled, too many attempts. Collapsing them into one is
-         what makes a fault here impossible to diagnose. */
+      /* Nothing resolved -- a wrong code, or too many attempts. The message is
+         all there is to say, and it belongs under the box they will retype in. */
       waiting.current = null
-      setSchedule(null)
+      setStatus(null)
       setPhase('entry')
       setError(e.retryAfter ? `${e.message} (${e.retryAfter}s)` : e.message)
     } finally {
@@ -226,17 +279,32 @@ export default function App() {
     }
   }
 
-  if (phase === 'scheduled' && schedule) {
+  const brand = { logoSrc: '/api/guest/logo', hasLogo, propertyName }
+  const enterCode = () => { setStatus(null); setPhase('entry'); setError(null) }
+
+  if (phase === 'scheduled' && status) {
     return (
       <ScheduledScreen
         // Remounted on each fresh answer, so a retry that comes back "still
         // scheduled" re-arms rather than sitting at zero forever.
-        key={schedule.now}
-        schedule={schedule}
+        key={status.now}
+        status={status}
         skew={skew}
         busy={busy}
-        brand={{ logoSrc: '/api/guest/logo', hasLogo, propertyName }}
+        brand={brand}
         onStart={() => waiting.current && submit(waiting.current)}
+        onEnterCode={enterCode}
+      />
+    )
+  }
+
+  if (phase === 'closed' && status) {
+    return (
+      <ClosedScreen
+        status={status}
+        message={status.message}
+        brand={brand}
+        onEnterCode={enterCode}
       />
     )
   }

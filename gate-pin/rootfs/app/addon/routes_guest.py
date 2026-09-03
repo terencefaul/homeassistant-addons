@@ -124,19 +124,27 @@ async def redeem(body: RedeemRequest, request: Request, response: Response):
         # thing the visitor reads, and several checks compare the four
         # messages for distinctness.
         payload: dict = {"detail": MESSAGES[result.outcome]}
-        if result.outcome == g.OUTCOME_SCHEDULED and result.grant is not None:
-            # The holder of a scheduled credential has proved possession; the
-            # only thing they are missing is the time. Telling them when turns
-            # a dead end into a wait, and saves the phone call asking why the
-            # link does not work.
-            payload["schedule"] = {
+        if result.grant is not None:
+            # The credential RESOLVED: whoever presented it holds something
+            # this system really issued, so saying which of the three ways it
+            # is unusable tells them nothing they could not already infer. A
+            # credential that does not resolve gets the message and nothing
+            # else -- a wrong code must never answer questions about grants
+            # that exist.
+            status: dict = {
+                "outcome": result.outcome,
                 "label": result.grant.label,
                 "theme": result.grant.theme,
-                "starts_at": result.grant.valid_from,
-                "expires_at": result.grant.valid_until,
-                # The device clock is not trustworthy and this is a countdown.
+                # The device clock is not trustworthy and this drives a countdown.
                 "now": now(),
             }
+            if result.outcome != g.OUTCOME_REVOKED:
+                # A revoked grant's valid_until is the window it WOULD have
+                # had. Showing it would tell a visitor to come back at a time
+                # the code will still be dead.
+                status["starts_at"] = result.grant.valid_from
+                status["expires_at"] = result.grant.valid_until
+            payload["status"] = status
         return JSONResponse(status_code=401, content=payload)
 
     d.limiter.record_success(ip, kind)

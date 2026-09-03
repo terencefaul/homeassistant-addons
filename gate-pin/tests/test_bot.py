@@ -114,6 +114,39 @@ def test_menu_and_presets_name_the_credentials_a_preset_will_mint(bot):
     assert "PIN + link" in listing and "link" in listing
 
 
+def test_new_can_start_later(bot):
+    """Minting from a phone is the path used at the gate, so the later start
+    the panel offers has to exist here too -- otherwise a scheduled code can
+    only be made at a desk."""
+    b, store, tg = bot
+    run(b._handle(msg(ALLOWED, "/new 2h cover.driveway --in 90m")))
+    grant = store.list_grants()[0]
+    assert grant.status() == "scheduled"
+    assert abs(grant.valid_from - (now() + 5400)) <= 5
+    assert grant.valid_until - grant.valid_from == 7200
+    # The reply says so, because a scheduled code reads as broken otherwise.
+    assert "Starts" in tg.sent[0]["text"]
+
+
+def test_new_from_a_preset_can_start_later_and_keeps_its_credentials(bot):
+    b, store, tg = bot
+    run(b._handle(msg(ALLOWED, "/new plumber --in=3h")))
+    grant = store.list_grants()[0]
+    assert grant.status() == "scheduled"
+    assert abs(grant.valid_from - (now() + 10800)) <= 5
+    assert sorted(grant.kinds) == ["pin", "token"]
+
+
+def test_a_start_offset_that_makes_no_sense_mints_nothing(bot):
+    """Silently minting a code that starts now, when the operator asked for
+    later, is worse than refusing -- they would hand it out believing it waits."""
+    b, store, tg = bot
+    run(b._handle(msg(ALLOWED, "/new 2h cover.driveway --in banana")))
+    assert store.list_grants() == []
+    run(b._handle(msg(ALLOWED, "/new 2h cover.driveway --in")))
+    assert store.list_grants() == []
+
+
 def test_menu_without_presets_says_so_rather_than_showing_nothing(bot):
     b, store, tg = bot
     store.delete_preset("p1")

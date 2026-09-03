@@ -227,24 +227,47 @@ def test_a_not_yet_active_credential_comes_back_with_its_window(ctx):
 
     # detail stays a plain string: it is what the visitor reads.
     assert isinstance(body["detail"], str)
-    s = body["schedule"]
-    assert s["starts_at"] == later.grant.valid_from
-    assert s["expires_at"] == later.grant.valid_until
+    st = body["status"]
+    assert st["outcome"] == "scheduled"
+    assert st["starts_at"] == later.grant.valid_from
+    assert st["expires_at"] == later.grant.valid_until
     # The countdown is anchored to the server, not the visitor's phone clock.
-    assert abs(s["now"] - now()) <= 5
-    assert s["now"] < s["starts_at"]
+    assert abs(st["now"] - now()) <= 5
+    assert st["now"] < st["starts_at"]
 
 
-def test_no_other_failure_reveals_a_window(ctx):
-    """A wrong code must not answer questions about grants that exist."""
+def test_an_expired_credential_says_so_and_when_it_ran_out(ctx):
+    """Same reasoning as the wait: a link-only guest has nothing to type, so
+    the code box is the question restated rather than an answer."""
     client, store, _ = ctx
-    unknown = client.post("/api/guest/redeem", json={"credential": "000000"}, headers=CF)
-    assert "schedule" not in unknown.json()
+    gone = mint(store)
+    store._x("UPDATE grants SET valid_until=? WHERE id=?", (now() - 1, gone.grant.id))
+    st = client.post(
+        "/api/guest/redeem", json={"credential": gone.pin}, headers=CF
+    ).json()["status"]
+    assert st["outcome"] == "expired"
+    assert st["expires_at"] == now() - 1
 
+
+def test_a_revoked_credential_is_not_given_a_window_to_come_back_for(ctx):
+    """valid_until on a revoked grant is the window it WOULD have had. Showing
+    it would send someone back at a time the code is still dead."""
+    client, store, _ = ctx
     killed = mint(store)
     store.revoke_grant(killed.grant.id)
-    revoked = client.post("/api/guest/redeem", json={"credential": killed.pin}, headers=CF)
-    assert "schedule" not in revoked.json()
+    st = client.post(
+        "/api/guest/redeem", json={"credential": killed.pin}, headers=CF
+    ).json()["status"]
+    assert st["outcome"] == "revoked"
+    assert "expires_at" not in st and "starts_at" not in st
+
+
+def test_a_credential_that_resolves_to_nothing_reveals_nothing(ctx):
+    """A wrong code must not answer questions about grants that exist."""
+    client, _, _ = ctx
+    body = client.post("/api/guest/redeem", json={"credential": "000000"}, headers=CF).json()
+    assert "status" not in body
+    assert isinstance(body["detail"], str)
 
 
 def test_a_dead_gate_is_reported_differently_from_a_wrong_code(ctx):

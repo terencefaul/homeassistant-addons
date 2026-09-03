@@ -36,6 +36,7 @@ HELP = """<b>Gate PIN</b>
 <code>/new 2h cover.driveway</code> — mint a grant
 <code>/new plumber</code> — mint from a preset
 <code>/new 2h cover.driveway --token-only</code> — link only
+<code>/new plumber --in 3h</code> — <b>start later</b>, any duration
 <code>/list</code> — live grants
 <code>/revoke &lt;id&gt;</code> — kill a grant now
 <code>/extend &lt;id&gt; 1h</code> — push out a live grant
@@ -292,7 +293,8 @@ class TelegramBot:
         live = await asyncio.to_thread(self._store.live_pin_grant_count)
         await self.send(
             chat_id,
-            f"<b>Mint a code</b>\nLive PIN grants: {live}/{self._cap}",
+            f"<b>Mint a code</b>\nLive PIN grants: {live}/{self._cap}\n"
+            f"<i>A tap mints now — for later, /new &lt;preset&gt; --in 3h</i>",
             buttons=rows,
         )
 
@@ -382,8 +384,10 @@ class TelegramBot:
         else:
             await self._answer_callback(cid)
 
-    async def _mint_and_reply(self, chat_id, *, label, entities, duration, theme, kinds):
-        start = now()
+    async def _mint_and_reply(
+        self, chat_id, *, label, entities, duration, theme, kinds, starts_in=0
+    ):
+        start = now() + starts_in
         try:
             result = await asyncio.to_thread(
                 g.mint, self._store,
@@ -400,7 +404,14 @@ class TelegramBot:
             chat_id,
             f"<b>{html.escape(result.grant.label or 'Grant')}</b> · <code>{result.grant.id}</code>\n"
             f"{html.escape(', '.join(result.grant.entities))}\n"
-            f"Valid {humanise(duration)}, until {_clock(result.grant.valid_until)}",
+            + (
+                # A scheduled code is not broken, but it will read as broken to
+                # whoever is handed it, so say so at the moment it is minted.
+                f"Starts {_clock(result.grant.valid_from)}, "
+                f"valid {humanise(duration)} from then"
+                if starts_in
+                else f"Valid {humanise(duration)}, until {_clock(result.grant.valid_until)}"
+            ),
             buttons=[[
                 ("+1 hour", f"x:{result.grant.id}:3600"),
                 ("Revoke", f"r:{result.grant.id}"),
@@ -420,12 +431,19 @@ class TelegramBot:
             return
 
         kinds = ["pin", "token"]
-        flags = {a.lower() for a in args if a.startswith("--")}
-        args = [a for a in args if not a.startswith("--")]
+        try:
+            args, flags, starts_in = _take_flags(args)
+        except DurationError as exc:
+            await self.send(chat_id, html.escape(str(exc)))
+            return
         if "--pin-only" in flags:
             kinds = ["pin"]
         elif "--token-only" in flags:
             kinds = ["token"]
+
+        if not args:
+            await self.send(chat_id, "Name a preset or a duration, e.g. <code>/new 2h cover.driveway</code>")
+            return
 
         preset = await asyncio.to_thread(self._store.get_preset_by_name, args[0])
         if preset:
@@ -448,7 +466,7 @@ class TelegramBot:
 
         await self._mint_and_reply(
             chat_id, label=label, entities=entities,
-            duration=duration, theme=theme, kinds=kinds,
+            duration=duration, theme=theme, kinds=kinds, starts_in=starts_in,
         )
 
     async def _list(self, chat_id: int) -> None:
@@ -528,6 +546,34 @@ class TelegramBot:
                 for p in presets
             ),
         )
+
+
+def _take_flags(args: list[str]) -> tuple[list[str], set[str], int]:
+    """Split `--flags` off the arguments, resolving `--in <duration>`.
+
+    Both `--in 90m` and `--in=90m` are accepted: the first is what anyone
+    types, the second is what survives a copy-paste."""
+    rest: list[str] = []
+    flags: set[str] = set()
+    starts_in = 0
+    expecting = False
+    for arg in args:
+        if expecting:
+            starts_in = parse_duration(arg)
+            expecting = False
+            continue
+        low = arg.lower()
+        if low in ("--in", "--start", "--from"):
+            expecting = True
+        elif low.startswith(("--in=", "--start=", "--from=")):
+            starts_in = parse_duration(arg.split("=", 1)[1])
+        elif low.startswith("--"):
+            flags.add(low)
+        else:
+            rest.append(arg)
+    if expecting:
+        raise DurationError("Say how long to wait, e.g. <code>--in 2h</code>.")
+    return rest, flags, starts_in
 
 
 def _kinds(kinds: Sequence[str]) -> str:

@@ -12,9 +12,10 @@ async function call(path, options = {}) {
     const err = new Error((body && body.detail) || 'Something went wrong.')
     err.status = res.status
     err.retryAfter = Number(res.headers.get('Retry-After') || 0)
-    // A not-yet-active credential comes back with the window it will open in,
-    // so the page can count down instead of just refusing.
-    err.schedule = (body && body.schedule) || null
+    // A credential that RESOLVED comes back with why it cannot be used and,
+    // where it helps, the window it applies to -- so the page can explain
+    // rather than just refuse. Absent for a code that resolved to nothing.
+    err.grantStatus = (body && body.status) || null
     throw err
   }
   return body
