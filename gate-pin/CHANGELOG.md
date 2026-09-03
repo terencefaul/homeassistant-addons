@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.8.1] - 2026-09-03
+- Mint a credential that starts after a custom number of hours, not just the fixed presets
+
 ## [0.8.0] - 2026-09-02
 - Presets choose PIN, link or both; fix guest page logo and button styling
 

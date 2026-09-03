@@ -10,6 +10,21 @@ const TABS = ['Control', 'Mint', 'Grants', 'Presets', 'Cameras', 'Audit', 'Setti
 const DURATIONS = [
   ['15 min', 900], ['1 hour', 3600], ['4 hours', 14400], ['24 hours', 86400], ['7 days', 604800],
 ]
+const START_PRESETS = [
+  ['Immediately', 0], ['In 1 hour', 3600], ['In 8 hours', 28800], ['Tomorrow', 86400],
+]
+/* The number input is free text until it parses, so it goes through here on
+   every render rather than being trusted at submit time: a half-typed "." or a
+   cleared field must still resolve to something the backend accepts (an int
+   from 0 to 30 days) instead of NaN. */
+const CUSTOM_HOURS_MIN = 0.5
+const CUSTOM_HOURS_MAX = 720
+const CUSTOM_HOURS_DEFAULT = 2
+function customHoursToSeconds(hours) {
+  const h = Number(hours)
+  if (!Number.isFinite(h) || h <= 0) return Math.round(CUSTOM_HOURS_DEFAULT * 3600)
+  return Math.round(Math.min(Math.max(h, CUSTOM_HOURS_MIN), CUSTOM_HOURS_MAX) * 3600)
+}
 
 function Banner({ error, onClose }) {
   if (!error) return null
@@ -97,18 +112,24 @@ function MintTab({ entities, presets, onMinted, setError, defaultTheme }) {
   const [label, setLabel] = useState('')
   const [selected, setSelected] = useState([])
   const [duration, setDuration] = useState(3600)
-  const [startsIn, setStartsIn] = useState(0)
+  /* startMode is the <select> value: a preset's seconds as a string, or the
+     sentinel 'custom'. startsIn is derived from it so there is one source of
+     truth and no effect keeping two numbers in step. */
+  const [startMode, setStartMode] = useState('0')
+  const [customHours, setCustomHours] = useState('')
   const [theme, setTheme] = useState(defaultTheme || 'dark')
   const [kinds, setKinds] = useState(['pin', 'token'])
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
+
+  const startsIn = startMode === 'custom' ? customHoursToSeconds(customHours) : Number(startMode)
 
   /** Tapping a preset fills this form rather than minting, so the label,
    *  duration, credentials and start can all be changed for one mint without
    *  editing -- or duplicating -- the preset itself. */
   const fillFrom = (p) => {
     setLabel(p.name); setSelected(p.entities); setDuration(p.duration_s)
-    setTheme(p.theme); setKinds(p.kinds); setStartsIn(0)
+    setTheme(p.theme); setKinds(p.kinds); setStartMode('0'); setCustomHours('')
   }
 
   async function submit(payload) {
@@ -159,12 +180,29 @@ function MintTab({ entities, presets, onMinted, setError, defaultTheme }) {
         </Field>
 
         <Field label="Starts" hint="A scheduled code exists now but will not work until it starts — and says so rather than reading as invalid.">
-          <select className={input} value={startsIn} onChange={(e) => setStartsIn(Number(e.target.value))}>
-            <option value={0}>Immediately</option>
-            <option value={3600}>In 1 hour</option>
-            <option value={28800}>In 8 hours</option>
-            <option value={86400}>Tomorrow</option>
+          <select className={input} value={startMode} onChange={(e) => setStartMode(e.target.value)}>
+            {START_PRESETS.map(([name, secs]) => (
+              <option key={secs} value={String(secs)}>{name}</option>
+            ))}
+            <option value="custom">Custom hours…</option>
           </select>
+          {startMode === 'custom' && (
+            <input
+              type="number"
+              min={CUSTOM_HOURS_MIN}
+              max={CUSTOM_HOURS_MAX}
+              step={0.5}
+              className={`${input} mt-2`}
+              value={customHours}
+              onChange={(e) => setCustomHours(e.target.value)}
+              placeholder={`Hours (default ${CUSTOM_HOURS_DEFAULT})`}
+            />
+          )}
+          <span className="block text-xs text-emerald-400/80 mt-1.5">
+            {startsIn === 0
+              ? 'Starts immediately'
+              : `Starts in ${relative(startsIn)} · ${clock(Math.floor(Date.now() / 1000) + startsIn)}`}
+          </span>
         </Field>
 
         <Field label="Credentials">
