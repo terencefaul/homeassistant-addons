@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.9.0] - 2026-09-03
+- A not-yet-active code shows a countdown and its window, and opens itself
+
 ## [0.8.1] - 2026-09-03
 - Mint a credential that starts after a custom number of hours, not just the fixed presets
 
