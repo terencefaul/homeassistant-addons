@@ -36,7 +36,10 @@ CREATE TABLE IF NOT EXISTS grants (
   -- NOT NULL by design: a permanent credential cannot be represented.
   valid_until   INTEGER NOT NULL,
   theme         TEXT NOT NULL DEFAULT 'dark',
-  revoked_at    INTEGER
+  revoked_at    INTEGER,
+  -- The order the owner put them in. Ties break on created_at DESC, so a list
+  -- that has never been reordered is newest-first, as it always was.
+  position      INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS credentials (
@@ -59,6 +62,9 @@ CREATE TABLE IF NOT EXISTS presets (
   duration_s    INTEGER NOT NULL,
   theme         TEXT NOT NULL DEFAULT 'dark',
   kinds         TEXT NOT NULL DEFAULT 'pin,token',
+  -- The order the owner put them in. Ties break on name, so a database that
+  -- has never been reordered reads exactly as it did when this was alphabetical.
+  position      INTEGER NOT NULL DEFAULT 0,
   created_at    INTEGER NOT NULL
 );
 
@@ -81,6 +87,19 @@ CREATE TABLE IF NOT EXISTS settings (
   value         TEXT NOT NULL
 );
 """
+
+# Columns added after a release shipped.
+#
+# `executescript(SCHEMA)` uses CREATE TABLE IF NOT EXISTS, which does nothing at
+# all to a table that already exists -- so a column declared above reaches a new
+# install and silently misses every existing one. Anything added from here on
+# has to be listed here as well as declared in SCHEMA. Adding the same column
+# twice is not possible: the check is on the live table, not on a version number.
+ADDED_COLUMNS = (
+    ("presets", "kinds", "kinds TEXT NOT NULL DEFAULT 'pin,token'"),
+    ("presets", "position", "position INTEGER NOT NULL DEFAULT 0"),
+    ("grants", "position", "position INTEGER NOT NULL DEFAULT 0"),
+)
 
 EVENTS = (
     "redeem_ok",
@@ -140,7 +159,17 @@ class Store:
             self._db.execute("PRAGMA foreign_keys=ON")
             self._db.execute("PRAGMA busy_timeout=5000")
             self._db.executescript(SCHEMA)
+            self._migrate()
             self._db.commit()
+
+    def _migrate(self) -> None:
+        """Apply ADDED_COLUMNS to a database that predates them.
+
+        Called with the lock held, before the commit in __init__."""
+        for table, column, ddl in ADDED_COLUMNS:
+            have = {r["name"] for r in self._db.execute(f"PRAGMA table_info({table})")}
+            if column not in have:
+                self._db.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
 
     # ---- credential fingerprinting -------------------------------------
 
@@ -170,6 +199,33 @@ class Store:
     def close(self) -> None:
         with self._lock:
             self._db.close()
+
+    def _reorder(self, table: str, ids: Sequence[str]) -> None:
+        """Set positions from the given order, in one transaction.
+
+        Rows not listed are pushed after the listed ones, keeping their
+        relative order. The panel sends back the list it was showing, so
+        anything minted from Telegram in between must not be dropped from the
+        ordering or silently promoted to the front.
+
+        `table` is never user input -- it is one of two literals below."""
+        with self._lock:
+            try:
+                self._db.execute("BEGIN IMMEDIATE")
+                for index, row_id in enumerate(ids):
+                    self._db.execute(
+                        f"UPDATE {table} SET position=? WHERE id=?", (index, row_id)
+                    )
+                if ids:
+                    marks = ",".join("?" * len(ids))
+                    self._db.execute(
+                        f"UPDATE {table} SET position=position+? WHERE id NOT IN ({marks})",
+                        (len(ids), *ids),
+                    )
+                self._db.commit()
+            except Exception:
+                self._db.rollback()
+                raise
 
     # ---- grants ---------------------------------------------------------
 
@@ -220,9 +276,14 @@ class Store:
         with self._lock:
             try:
                 self._db.execute("BEGIN IMMEDIATE")
+                # Ahead of everything, so newest-first survives a manual
+                # reorder. A grant that landed at the bottom of a long list is
+                # one you would not find when you needed to revoke it.
                 self._db.execute(
-                    "INSERT INTO grants (id,label,created_at,valid_from,valid_until,theme)"
-                    " VALUES (?,?,?,?,?,?)",
+                    "INSERT INTO grants"
+                    " (id,label,created_at,valid_from,valid_until,theme,position)"
+                    " VALUES (?,?,?,?,?,?,"
+                    "(SELECT COALESCE(MIN(position),0)-1 FROM grants))",
                     (grant_id, label, now(), valid_from, valid_until, theme),
                 )
                 for e in entities:
@@ -270,11 +331,14 @@ class Store:
         )
 
     def list_grants(self, include_finished: bool = True) -> list[Grant]:
-        rows = self._q("SELECT * FROM grants ORDER BY created_at DESC")
+        rows = self._q("SELECT * FROM grants ORDER BY position, created_at DESC")
         grants = [self._hydrate(r) for r in rows]
         if include_finished:
             return grants
         return [g for g in grants if g.status() in ("active", "scheduled")]
+
+    def reorder_grants(self, ids: Sequence[str]) -> None:
+        self._reorder("grants", ids)
 
     def revoke_grant(self, grant_id: str) -> bool:
         return (
@@ -367,9 +431,11 @@ class Store:
         theme: str,
         kinds: Sequence[str],
     ) -> None:
+        # position is absent from both halves on purpose: a new preset takes the
+        # next place, and editing an existing one must not move it.
         self._x(
-            "INSERT INTO presets (id,name,entities,duration_s,theme,kinds,created_at)"
-            " VALUES (?,?,?,?,?,?,?)"
+            "INSERT INTO presets (id,name,entities,duration_s,theme,kinds,position,created_at)"
+            " VALUES (?,?,?,?,?,?,(SELECT COALESCE(MAX(position),-1)+1 FROM presets),?)"
             " ON CONFLICT(id) DO UPDATE SET name=excluded.name, entities=excluded.entities,"
             " duration_s=excluded.duration_s, theme=excluded.theme, kinds=excluded.kinds",
             (
@@ -393,7 +459,9 @@ class Store:
                 "theme": r["theme"],
                 "kinds": [k for k in r["kinds"].split(",") if k],
             }
-            for r in self._q("SELECT * FROM presets ORDER BY name")
+            # Name is the tiebreak, so a database that has never been
+            # reordered -- every position still 0 -- reads alphabetically.
+            for r in self._q("SELECT * FROM presets ORDER BY position, name")
         ]
 
     def get_preset_by_name(self, name: str) -> Optional[dict[str, Any]]:
@@ -401,6 +469,9 @@ class Store:
             if p["name"].lower() == name.lower():
                 return p
         return None
+
+    def reorder_presets(self, ids: Sequence[str]) -> None:
+        self._reorder("presets", ids)
 
     def delete_preset(self, preset_id: str) -> bool:
         return self._x("DELETE FROM presets WHERE id=?", (preset_id,)) == 1

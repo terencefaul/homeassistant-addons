@@ -4,7 +4,7 @@ import ControlTab from './ControlTab.jsx'
 import EntityPicker from './EntityPicker.jsx'
 import { writeToClipboard } from './clipboard.js'
 import QrCode from './QrCode.jsx'
-import { Button, Card, Field, KindPicker, Pill, STATUS_TONE, ThemeSelect, clock, input, kindsLabel, relative } from './ui.jsx'
+import { Button, Card, Field, KindPicker, MoveButtons, Pill, STATUS_TONE, ThemeSelect, clock, input, kindsLabel, relative } from './ui.jsx'
 
 const TABS = ['Control', 'Mint', 'Grants', 'Presets', 'Cameras', 'Audit', 'Settings']
 const DURATIONS = [
@@ -250,14 +250,37 @@ function GrantsTab({ data, reload, setError }) {
   const live = data.grants.filter((g) => ['active', 'scheduled'].includes(g.status))
   const done = data.grants.filter((g) => !['active', 'scheduled'].includes(g.status))
 
-  const row = (g) => (
+  /* Reordering happens within the live list, but the whole list is sent: every
+     row then has an explicit position, rather than the finished ones drifting
+     further back on each move. */
+  const move = (id, delta) => {
+    const ids = live.map((x) => x.id)
+    const i = ids.indexOf(id)
+    const to = i + delta
+    if (to < 0 || to >= ids.length) return
+    ;[ids[i], ids[to]] = [ids[to], ids[i]]
+    run(id, () => api.orderGrants([...ids, ...done.map((x) => x.id)]))
+  }
+
+  const row = (g, i, shown) => (
     <Card key={g.id} className="mb-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-medium truncate">{g.label || 'Unlabelled'}</p>
           <p className="text-xs text-zinc-500 font-mono mt-0.5">{g.id}</p>
         </div>
-        <Pill tone={STATUS_TONE[g.status]}>{g.status}</Pill>
+        <div className="flex items-center gap-2 shrink-0">
+          <Pill tone={STATUS_TONE[g.status]}>{g.status}</Pill>
+          {['active', 'scheduled'].includes(g.status) && shown.length > 1 && (
+            <MoveButtons
+              disabled={busy === g.id}
+              atTop={i === 0}
+              atBottom={i === shown.length - 1}
+              onUp={() => move(g.id, -1)}
+              onDown={() => move(g.id, 1)}
+            />
+          )}
+        </div>
       </div>
       <p className="text-sm text-zinc-400 mt-3 break-words">{g.entities.join(', ')}</p>
       <p className="text-sm text-zinc-500 mt-1">
@@ -333,9 +356,25 @@ function PresetsTab({ entities, presets, reload, setError, defaultTheme }) {
     try { await api.savePreset(draft); setDraft(null); reload() } catch (e) { setError(e.message) }
   }
 
+  /* The order set here is the order everywhere: the Mint tab's chips, the
+     Telegram menu buttons and /presets all read the same list. */
+  async function move(index, delta) {
+    const ids = presets.map((p) => p.id)
+    const to = index + delta
+    if (to < 0 || to >= ids.length) return
+    ;[ids[index], ids[to]] = [ids[to], ids[index]]
+    setError(null)
+    try { await api.orderPresets(ids); reload() } catch (e) { setError(e.message) }
+  }
+
   return (
     <div>
-      {presets.map((p) => (
+      {presets.length > 1 && (
+        <p className="text-xs text-zinc-500 mb-3">
+          This order is the order of the Mint tab chips and the Telegram menu buttons.
+        </p>
+      )}
+      {presets.map((p, i) => (
         <Card key={p.id} className="mb-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -343,6 +382,14 @@ function PresetsTab({ entities, presets, reload, setError, defaultTheme }) {
               <p className="text-sm text-zinc-400 mt-1 break-words">{p.entities.join(', ')}</p>
               <p className="text-sm text-zinc-500 mt-1">{relative(p.duration_s)} · {kindsLabel(p.kinds)} · {p.theme}</p>
             </div>
+            {presets.length > 1 && (
+              <MoveButtons
+                atTop={i === 0}
+                atBottom={i === presets.length - 1}
+                onUp={() => move(i, -1)}
+                onDown={() => move(i, 1)}
+              />
+            )}
           </div>
           <div className="flex gap-2 mt-4">
             <Button variant="ghost" onClick={() => setDraft(p)}>Edit</Button>

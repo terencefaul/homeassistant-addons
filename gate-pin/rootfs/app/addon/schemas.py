@@ -68,6 +68,15 @@ class PresetRequest(Strict):
     kinds: list[Kind] = Field(default=["pin", "token"], min_length=1, max_length=2)
 
 
+class ReorderRequest(Strict):
+    """The ids in the order they should appear, top first.
+
+    The panel sends back the whole list it was showing; anything the server has
+    that is not in it keeps its relative place after the listed ones."""
+
+    ids: list[str] = Field(default=[], max_length=500)
+
+
 class BrandingRequest(Strict):
     accent: str = Field(default="#22c55e", pattern=r"^#[0-9a-fA-F]{6}$")
     default_theme: Theme = "dark"

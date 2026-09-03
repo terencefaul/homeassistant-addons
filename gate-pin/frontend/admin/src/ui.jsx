@@ -51,6 +51,17 @@ export const KindPicker = ({ value, onChange }) => {
 export const kindsLabel = (kinds) =>
   kinds.map((k) => (k === 'pin' ? 'PIN' : 'link')).join(' + ')
 
+/* Up/down rather than drag, matching the control page editor: drag is fiddly on
+ * a phone and would need a library for no real gain. */
+export const MoveButtons = ({ onUp, onDown, atTop, atBottom, disabled }) => (
+  <div className="flex gap-1">
+    <Button variant="ghost" className="px-3" disabled={disabled || atTop}
+      title="Move up" onClick={onUp}>↑</Button>
+    <Button variant="ghost" className="px-3" disabled={disabled || atBottom}
+      title="Move down" onClick={onDown}>↓</Button>
+  </div>
+)
+
 export const ThemeSelect = ({ value, onChange }) => (
   <select className={input} value={value} onChange={(e) => onChange(e.target.value)}>
     {THEMES.map((t) => <option key={t} value={t}>{t}</option>)}

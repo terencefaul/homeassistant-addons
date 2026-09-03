@@ -35,6 +35,7 @@ from .schemas import (
     OwnerActRequest,
     PresetRequest,
     ReissueRequest,
+    ReorderRequest,
 )
 
 router = APIRouter(
@@ -150,6 +151,13 @@ async def list_grants(request: Request):
     }
 
 
+@router.post("/grants/order")
+async def order_grants(body: ReorderRequest, request: Request):
+    d = deps(request)
+    await asyncio.to_thread(d.store.reorder_grants, body.ids)
+    return await list_grants(request)
+
+
 @router.post("/grants/{grant_id}/revoke")
 async def revoke(grant_id: str, request: Request):
     d = deps(request)
@@ -236,6 +244,13 @@ async def save_preset(body: PresetRequest, request: Request):
         theme=theme,
         kinds=body.kinds,
     )
+    return {"presets": await asyncio.to_thread(d.store.list_presets)}
+
+
+@router.post("/presets/order")
+async def order_presets(body: ReorderRequest, request: Request):
+    d = deps(request)
+    await asyncio.to_thread(d.store.reorder_presets, body.ids)
     return {"presets": await asyncio.to_thread(d.store.list_presets)}
 
 

@@ -117,3 +117,124 @@ def test_grant_scoping_is_per_grant_not_global(store):
     assert store.grant_allows(a.grant.id, "cover.driveway")
     assert not store.grant_allows(a.grant.id, "light.porch")
     assert not store.grant_allows(b.grant.id, "cover.driveway")
+
+
+# ---- ordering and the migration that makes it possible --------------------
+
+def _preset(store, name, **kw):
+    store.upsert_preset(
+        preset_id=name, name=name, entities=["cover.driveway"],
+        duration_s=3600, theme="dark", kinds=["pin"], **kw,
+    )
+
+
+def test_new_presets_append_rather_than_sorting_by_name(store):
+    """A list you can reorder has to put new items somewhere predictable, and
+    'last' is the only place that does not disturb an order already set."""
+    for name in ("courier", "builder", "plumber"):
+        _preset(store, name)
+    assert [p["name"] for p in store.list_presets()] == ["courier", "builder", "plumber"]
+
+
+def test_a_migrated_database_still_reads_alphabetically(store):
+    """What every existing install sees on upgrade: the migration leaves every
+    position at 0, and name is the tiebreak, so nothing appears to have moved
+    until the owner moves something."""
+    for name in ("courier", "builder", "plumber"):
+        _preset(store, name)
+    store._x("UPDATE presets SET position=0")
+    assert [p["name"] for p in store.list_presets()] == ["builder", "courier", "plumber"]
+
+
+def test_reordering_presets_sticks(store):
+    for name in ("courier", "builder", "plumber"):
+        _preset(store, name)
+    store.reorder_presets(["plumber", "courier", "builder"])
+    assert [p["name"] for p in store.list_presets()] == ["plumber", "courier", "builder"]
+
+
+def test_editing_a_preset_does_not_move_it(store):
+    """Renaming or retiming a preset from the panel must not throw away the
+    order the owner set -- the two are edited on the same screen."""
+    for name in ("courier", "builder", "plumber"):
+        _preset(store, name)
+    store.reorder_presets(["plumber", "courier", "builder"])
+    store.upsert_preset(
+        preset_id="courier", name="courier", entities=["cover.driveway"],
+        duration_s=7200, theme="warm", kinds=["token"],
+    )
+    assert [p["name"] for p in store.list_presets()] == ["plumber", "courier", "builder"]
+
+
+def test_a_new_preset_lands_at_the_end(store):
+    for name in ("courier", "builder"):
+        _preset(store, name)
+    store.reorder_presets(["courier", "builder"])
+    _preset(store, "plumber")
+    assert [p["name"] for p in store.list_presets()] == ["courier", "builder", "plumber"]
+
+
+def test_reordering_keeps_rows_it_was_not_told_about(store):
+    """The panel sends back the list it was showing. A preset created from
+    Telegram in between must not be dropped from the ordering."""
+    for name in ("courier", "builder"):
+        _preset(store, name)
+    _preset(store, "plumber")
+    store.reorder_presets(["plumber", "courier"])
+    names = [p["name"] for p in store.list_presets()]
+    assert names[:2] == ["plumber", "courier"]
+    assert "builder" in names
+
+
+def test_grants_read_newest_first_until_they_are_reordered(store):
+    first = mint(store, label="first")
+    second = mint(store, label="second")
+    assert [x.label for x in store.list_grants()] == ["second", "first"]
+    store.reorder_grants([first.grant.id, second.grant.id])
+    assert [x.label for x in store.list_grants()] == ["first", "second"]
+
+
+def test_a_new_grant_goes_to_the_top_even_after_a_reorder(store):
+    """The opposite of presets, deliberately: this list is read to find the
+    grant you just made, or the one you need to revoke."""
+    a = mint(store, label="a")
+    b = mint(store, label="b")
+    store.reorder_grants([a.grant.id, b.grant.id])
+    mint(store, label="newest")
+    assert [x.label for x in store.list_grants()][0] == "newest"
+
+
+def test_a_database_without_the_position_columns_gains_them(tmp_path):
+    """CREATE TABLE IF NOT EXISTS does nothing to a table that already exists,
+    so a column added after release reaches new installs only. Without the
+    migration this raises "no such column: position" on every existing one."""
+    import sqlite3
+
+    secret = load_or_create_secret(tmp_path / "secret.key")
+    path = tmp_path / "old.db"
+
+    # A presets table shaped the way it was before ordering existed.
+    db = sqlite3.connect(path)
+    db.executescript(
+        """
+        CREATE TABLE presets (
+          id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, entities TEXT NOT NULL,
+          duration_s INTEGER NOT NULL, theme TEXT NOT NULL DEFAULT 'dark',
+          created_at INTEGER NOT NULL
+        );
+        INSERT INTO presets VALUES ('p1','plumber','cover.driveway',3600,'dark',0);
+        """
+    )
+    db.commit()
+    db.close()
+
+    s = Store(path, secret)
+    try:
+        # Both columns added after the fact, and the existing row survived.
+        assert [p["name"] for p in s.list_presets()] == ["plumber"]
+        assert s.list_presets()[0]["kinds"] == ["pin", "token"]
+        _preset(s, "courier")
+        s.reorder_presets(["courier", "p1"])
+        assert [p["name"] for p in s.list_presets()] == ["courier", "plumber"]
+    finally:
+        s.close()

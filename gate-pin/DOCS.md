@@ -172,7 +172,10 @@ The result screen shows the PIN, the link, and a scannable QR — **once**.
 
 **Presets.** A preset is a whole mint saved under a name: the entities, how long
 it lasts, the guest page theme, and **which credentials it produces** — PIN,
-link, or both. A courier who only ever gets a link you tap and forward; a plumber
+link, or both. The ↑↓ buttons on the Presets tab set the order, and that one
+order is used everywhere: the Mint tab chips, the Telegram `/menu` buttons and
+`/presets`. Put the one you mint most at the top. New presets are added at the
+end, so setting an order does not get undone by creating another one. A courier who only ever gets a link you tap and forward; a plumber
 you read a PIN to over the phone. Tapping a preset on the Mint tab fills the form
 rather than minting, so anything can be changed for that one visitor without
 editing the preset.
@@ -216,6 +219,10 @@ a visitor does not also forward the PIN.
 **What the visitor sees.** Your public URL, a box for the code — or, from a
 link, no typing at all. Then only the entities on that grant, with live state
 and one large button each. When the window closes, both credentials stop working.
+
+Live grants can be reordered the same way, for when several are open at once
+and one of them matters more than the rest. Newly minted grants always appear at
+the top regardless — a grant you cannot find is a grant you cannot revoke.
 
 **A code that has not started yet** does not show the code box at all — there is
 nothing useful to type, and a link-only guest has no code to type. They get your

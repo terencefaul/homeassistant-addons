@@ -409,6 +409,32 @@ def test_a_preset_keeps_the_credentials_and_theme_it_was_saved_with(ctx):
     assert r.pin is None and r.token
 
 
+def test_the_panel_can_reorder_presets_and_grants(ctx):
+    """The preset order is the order of the Mint chips and the Telegram menu,
+    so it is set once here rather than per surface."""
+    client, store, _ = ctx
+    for name in ("courier", "builder"):
+        store.upsert_preset(preset_id=name, name=name, entities=["cover.driveway"],
+                            duration_s=3600, theme="dark", kinds=["pin"])
+    body = client.post("/api/admin/presets/order", headers=INGRESS,
+                       json={"ids": ["builder", "courier"]}).json()
+    assert [p["name"] for p in body["presets"]] == ["builder", "courier"]
+
+    a, b = mint(store), mint(store)
+    body = client.post("/api/admin/grants/order", headers=INGRESS,
+                       json={"ids": [a.grant.id, b.grant.id]}).json()
+    assert [x["id"] for x in body["grants"]] == [a.grant.id, b.grant.id]
+
+
+def test_reordering_rejects_anything_but_a_list_of_ids(ctx):
+    """extra="forbid" is the reason this API is safe to hand a list of ids at
+    all -- a body carrying a position, a name or a service must not parse."""
+    client, _, _ = ctx
+    r = client.post("/api/admin/presets/order", headers=INGRESS,
+                    json={"ids": ["p1"], "position": 3})
+    assert r.status_code == 422
+
+
 def test_a_preset_saved_without_a_theme_takes_the_branding_default(ctx):
     """presets.theme is NOT NULL. Passing the model's None straight through
     was a 500 waiting for the first client that omitted the field."""
