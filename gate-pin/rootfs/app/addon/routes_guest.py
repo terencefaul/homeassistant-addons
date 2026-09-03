@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 
 from gate_pin import grants as g
 from gate_pin import policy
@@ -118,7 +119,25 @@ async def redeem(body: RedeemRequest, request: Request, response: Response):
         if after.lockout:
             await asyncio.to_thread(d.store.log, "lockout", client_ip=ip, detail="pin budget exhausted")
             asyncio.create_task(_alert_lockout(d, ip))
-        raise HTTPException(status_code=401, detail=MESSAGES[result.outcome])
+
+        # `detail` stays a plain string for every outcome -- it is the one
+        # thing the visitor reads, and several checks compare the four
+        # messages for distinctness.
+        payload: dict = {"detail": MESSAGES[result.outcome]}
+        if result.outcome == g.OUTCOME_SCHEDULED and result.grant is not None:
+            # The holder of a scheduled credential has proved possession; the
+            # only thing they are missing is the time. Telling them when turns
+            # a dead end into a wait, and saves the phone call asking why the
+            # link does not work.
+            payload["schedule"] = {
+                "label": result.grant.label,
+                "theme": result.grant.theme,
+                "starts_at": result.grant.valid_from,
+                "expires_at": result.grant.valid_until,
+                # The device clock is not trustworthy and this is a countdown.
+                "now": now(),
+            }
+        return JSONResponse(status_code=401, content=payload)
 
     d.limiter.record_success(ip, kind)
     grant = result.grant
@@ -136,6 +155,7 @@ async def redeem(body: RedeemRequest, request: Request, response: Response):
         "label": grant.label,
         "theme": grant.theme,
         "expires_at": grant.valid_until,
+        "now": now(),
         "entities": await _entity_view(d, grant),
     }
 
@@ -167,7 +187,11 @@ async def state(request: Request):
     # revocation takes effect in a tab that is already open.
     if grant is None or not grant.is_live:
         raise HTTPException(status_code=401, detail="This code is no longer valid.")
-    return {"expires_at": grant.valid_until, "entities": await _entity_view(d, grant)}
+    return {
+        "expires_at": grant.valid_until,
+        "now": now(),
+        "entities": await _entity_view(d, grant),
+    }
 
 
 @router.post("/act")

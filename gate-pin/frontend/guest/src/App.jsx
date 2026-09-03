@@ -16,21 +16,95 @@ function takeTokenFromUrl() {
   return m[1]
 }
 
-function Countdown({ until }) {
-  const [left, setLeft] = useState(() => until - Math.floor(Date.now() / 1000))
+/* Seconds until `target`, ticking.
+ *
+ * `skew` is the server's clock minus this device's, measured when the server
+ * last answered. A phone with a wrong clock is common and a countdown built on
+ * it is wrong by exactly that much -- which for a code that starts at 14:00
+ * means someone standing at a gate watching a timer that has already passed. */
+function useCountdown(target, skew = 0) {
+  const read = () => target - (Math.floor(Date.now() / 1000) + skew)
+  const [left, setLeft] = useState(read)
   useEffect(() => {
-    const t = setInterval(() => setLeft(until - Math.floor(Date.now() / 1000)), 1000)
+    setLeft(read())
+    const t = setInterval(() => setLeft(read()), 1000)
     return () => clearInterval(t)
-  }, [until])
-  if (left <= 0) return <span>expired</span>
-  const h = Math.floor(left / 3600)
+  }, [target, skew])
+  return left
+}
+
+function humanise(left) {
+  const d = Math.floor(left / 86400)
+  const h = Math.floor((left % 86400) / 3600)
   const m = Math.floor((left % 3600) / 60)
   const s = left % 60
-  return <span>{h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`} left</span>
+  if (d > 0) return `${d}d ${h}h`
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}
+
+const clock = (epoch) =>
+  new Date(epoch * 1000).toLocaleString(undefined, {
+    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  })
+
+function Countdown({ until, skew }) {
+  const left = useCountdown(until, skew)
+  if (left <= 0) return <span>expired</span>
+  return <span>{humanise(left)} left</span>
+}
+
+/* A credential that is real but not yet in its window.
+ *
+ * The visitor holds something valid, so there is nothing to type and no reason
+ * to show the code box -- a link-only guest has no code to give it. They are
+ * shown the wait instead, and the moment it reaches zero the credential is
+ * tried again on its own, so nobody has to notice and tap. */
+function ScheduledScreen({ schedule, skew, busy, onStart, brand }) {
+  const left = useCountdown(schedule.starts_at, skew)
+  const fired = useRef(false)
+
+  useEffect(() => {
+    if (left > 0 || fired.current) return
+    fired.current = true
+    onStart()
+  }, [left, onStart])
+
+  return (
+    <main className="mx-auto max-w-md px-6 min-h-full flex flex-col justify-center py-10 text-center">
+      <BrandHeader {...brand} />
+      <h1 className="text-3xl font-bold">{schedule.label || 'Guest access'}</h1>
+      <p className="mt-2 text-base" style={{ color: 'var(--gp-muted)' }}>
+        This code isn&rsquo;t active yet.
+      </p>
+
+      <p className="mt-10 text-5xl font-semibold tabular-nums" style={{ color: 'var(--gp-accent)' }}>
+        {left > 0 ? humanise(left) : 'Starting…'}
+      </p>
+      <p className="mt-2 text-sm uppercase tracking-wider" style={{ color: 'var(--gp-muted)' }}>
+        {left > 0 ? 'until it starts' : busy ? 'checking' : 'starting'}
+      </p>
+
+      <div
+        className="mt-10 rounded-2xl p-4 text-sm"
+        style={{ background: 'var(--gp-card)', border: '1px solid var(--gp-border)' }}
+      >
+        <p style={{ color: 'var(--gp-muted)' }}>Active from</p>
+        <p className="mt-0.5 text-base font-medium">{clock(schedule.starts_at)}</p>
+        <p className="mt-3" style={{ color: 'var(--gp-muted)' }}>Until</p>
+        <p className="mt-0.5 text-base font-medium">{clock(schedule.expires_at)}</p>
+      </div>
+
+      <p className="mt-6 text-sm" style={{ color: 'var(--gp-muted)' }}>
+        Keep this page open — it opens by itself when the time comes.
+      </p>
+    </main>
+  )
 }
 
 export default function App() {
-  const [phase, setPhase] = useState('entry') // entry | unlocked
+  const [phase, setPhase] = useState('entry') // entry | scheduled | unlocked
   const [pin, setPin] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -40,11 +114,19 @@ export default function App() {
   const [accent, setAccent] = useState(null)
   const [hasLogo, setHasLogo] = useState(false)
   const [propertyName, setPropertyName] = useState('')
+  const [schedule, setSchedule] = useState(null)
+  // The server's clock minus this device's, from the last answer it gave.
+  const [skew, setSkew] = useState(0)
+  // Kept only in memory, only to retry when the window opens -- it is the same
+  // credential the visitor already holds, and it is never written anywhere.
+  const waiting = useRef(null)
   const autoTried = useRef(false)
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', grant?.theme || 'dark')
-  }, [grant])
+    document.documentElement.setAttribute(
+      'data-theme', grant?.theme || schedule?.theme || 'dark',
+    )
+  }, [grant, schedule])
 
   useEffect(() => {
     if (accent) document.documentElement.style.setProperty('--gp-accent', accent)
@@ -60,17 +142,37 @@ export default function App() {
       .catch(() => {})
   }, [])
 
+  const anchor = (serverNow) => {
+    if (serverNow) setSkew(serverNow - Math.floor(Date.now() / 1000))
+  }
+
   const submit = useCallback(async (credential) => {
     setBusy(true); setError(null)
     try {
       const data = await api.redeem(credential)
+      anchor(data.now)
       setGrant(data)
+      setSchedule(null)
+      waiting.current = null
       setPhase('unlocked')
       setPin('')
     } catch (e) {
-      /* Every outcome has its own message from the server -- wrong code, not
-         active yet, expired, cancelled, too many attempts. Collapsing them
-         into one is what makes a fault here impossible to diagnose. */
+      if (e.schedule) {
+        /* Valid, just early. There is nothing useful to type -- a link-only
+           guest has no code at all -- so the wait replaces the code box. */
+        anchor(e.schedule.now)
+        waiting.current = credential
+        setSchedule(e.schedule)
+        setPhase('scheduled')
+        setPin('')
+        return
+      }
+      /* Every other outcome has its own message from the server -- wrong code,
+         expired, cancelled, too many attempts. Collapsing them into one is
+         what makes a fault here impossible to diagnose. */
+      waiting.current = null
+      setSchedule(null)
+      setPhase('entry')
       setError(e.retryAfter ? `${e.message} (${e.retryAfter}s)` : e.message)
     } finally {
       setBusy(false)
@@ -89,6 +191,7 @@ export default function App() {
     const t = setInterval(async () => {
       try {
         const s = await api.state()
+        anchor(s.now)
         setGrant((g) => ({ ...g, ...s }))
       } catch (e) {
         if (e.status === 401) { setPhase('entry'); setGrant(null); setError(e.message) }
@@ -123,6 +226,21 @@ export default function App() {
     }
   }
 
+  if (phase === 'scheduled' && schedule) {
+    return (
+      <ScheduledScreen
+        // Remounted on each fresh answer, so a retry that comes back "still
+        // scheduled" re-arms rather than sitting at zero forever.
+        key={schedule.now}
+        schedule={schedule}
+        skew={skew}
+        busy={busy}
+        brand={{ logoSrc: '/api/guest/logo', hasLogo, propertyName }}
+        onStart={() => waiting.current && submit(waiting.current)}
+      />
+    )
+  }
+
   if (phase === 'unlocked' && grant) {
     return (
       <main className="mx-auto max-w-md px-4 py-6">
@@ -135,7 +253,7 @@ export default function App() {
         <header className="mb-5">
           <h1 className="text-2xl font-bold">{grant.label || 'Welcome'}</h1>
           <p className="text-sm mt-1" style={{ color: 'var(--gp-muted)' }}>
-            <Countdown until={grant.expires_at} />
+            <Countdown until={grant.expires_at} skew={skew} />
           </p>
         </header>
         {grant.entities?.length ? (

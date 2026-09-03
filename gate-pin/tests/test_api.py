@@ -215,6 +215,38 @@ def test_every_redemption_failure_has_its_own_message(ctx):
     assert len(set(seen.values())) == 4, f"messages collapsed: {seen}"
 
 
+def test_a_not_yet_active_credential_comes_back_with_its_window(ctx):
+    """The holder has proved possession -- the only thing missing is the time.
+    Without the window the page can only say no, and a link-only guest has no
+    code to type into the box it would otherwise be shown."""
+    client, store, _ = ctx
+    later = mint(store, valid_from=now() + 600, valid_until=now() + 1200)
+    r = client.post("/api/guest/redeem", json={"credential": later.pin}, headers=CF)
+    assert r.status_code == 401
+    body = r.json()
+
+    # detail stays a plain string: it is what the visitor reads.
+    assert isinstance(body["detail"], str)
+    s = body["schedule"]
+    assert s["starts_at"] == later.grant.valid_from
+    assert s["expires_at"] == later.grant.valid_until
+    # The countdown is anchored to the server, not the visitor's phone clock.
+    assert abs(s["now"] - now()) <= 5
+    assert s["now"] < s["starts_at"]
+
+
+def test_no_other_failure_reveals_a_window(ctx):
+    """A wrong code must not answer questions about grants that exist."""
+    client, store, _ = ctx
+    unknown = client.post("/api/guest/redeem", json={"credential": "000000"}, headers=CF)
+    assert "schedule" not in unknown.json()
+
+    killed = mint(store)
+    store.revoke_grant(killed.grant.id)
+    revoked = client.post("/api/guest/redeem", json={"credential": killed.pin}, headers=CF)
+    assert "schedule" not in revoked.json()
+
+
 def test_a_dead_gate_is_reported_differently_from_a_wrong_code(ctx):
     """Without this the visitor is told 'wrong code' when the gate is simply
     unreachable, and you spend the evening re-minting credentials."""

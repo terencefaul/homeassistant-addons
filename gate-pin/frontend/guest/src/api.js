@@ -12,6 +12,9 @@ async function call(path, options = {}) {
     const err = new Error((body && body.detail) || 'Something went wrong.')
     err.status = res.status
     err.retryAfter = Number(res.headers.get('Retry-After') || 0)
+    // A not-yet-active credential comes back with the window it will open in,
+    // so the page can count down instead of just refusing.
+    err.schedule = (body && body.schedule) || null
     throw err
   }
   return body

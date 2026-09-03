@@ -205,6 +205,11 @@ a visitor does not also forward the PIN.
 link, no typing at all. Then only the entities on that grant, with live state
 and one large button each. When the window closes, both credentials stop working.
 
+**A code that has not started yet** does not show the code box at all — there is
+nothing useful to type, and a link-only guest has no code to type. They get your
+logo, a countdown, and the window it opens in. When the countdown reaches zero
+the page lets itself in, so nobody has to be watching.
+
 ## Things worth understanding
 
 **Credentials are shown once.** Only a keyed hash is stored, so no screen and no
