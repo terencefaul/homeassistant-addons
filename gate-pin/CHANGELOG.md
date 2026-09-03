@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.10.0] - 2026-09-03
+- Expired and cancelled codes explain themselves; Telegram can mint with a later start
+
 ## [0.9.0] - 2026-09-03
 - A not-yet-active code shows a countdown and its window, and opens itself
 
