@@ -114,6 +114,63 @@ def test_menu_and_presets_name_the_credentials_a_preset_will_mint(bot):
     assert "PIN + link" in listing and "link" in listing
 
 
+def test_the_menu_offers_a_clock_beside_every_preset(bot):
+    """One tap still mints now -- that is the whole point of the menu -- so
+    'later' has to be a second button rather than a step in front of it."""
+    b, _, tg = bot
+    run(b._handle(msg(ALLOWED, "/menu")))
+    keyboard = tg.sent[0]["reply_markup"]["inline_keyboard"]
+    data = [btn["callback_data"] for row in keyboard for btn in row]
+    assert "m:p1" in data and "w:p1" in data
+
+
+def test_the_clock_asks_before_it_mints(bot):
+    b, store, tg = bot
+    run(b._handle(tap(ALLOWED, "w:p1")))
+    assert store.list_grants() == [], "asking must not have minted anything"
+    keyboard = tg.sent[0]["reply_markup"]["inline_keyboard"]
+    data = [btn["callback_data"] for row in keyboard for btn in row]
+    assert "s:p1:3600" in data and "c:p1" in data
+
+
+def test_choosing_a_start_mints_a_scheduled_grant(bot):
+    b, store, _ = bot
+    run(b._handle(tap(ALLOWED, "s:p1:28800")))
+    grant = store.list_grants()[0]
+    assert grant.status() == "scheduled"
+    assert abs(grant.valid_from - (now() + 28800)) <= 5
+    # The preset's own fields still decide everything else.
+    assert sorted(grant.kinds) == ["pin", "token"]
+
+
+def test_a_custom_start_is_taken_from_the_next_reply(bot):
+    b, store, tg = bot
+    run(b._handle(tap(ALLOWED, "c:p1")))
+    assert store.list_grants() == []
+    run(b._handle(msg(ALLOWED, "90m")))
+    grant = store.list_grants()[0]
+    assert abs(grant.valid_from - (now() + 5400)) <= 5
+
+
+def test_a_pending_prompt_never_swallows_a_command(bot):
+    """A forgotten prompt that eats the next /menu would look like a dead bot."""
+    b, store, tg = bot
+    run(b._handle(tap(ALLOWED, "c:p1")))
+    run(b._handle(msg(ALLOWED, "/menu")))
+    assert store.list_grants() == []
+    assert "Mint a code" in tg.sent[-1]["text"]
+
+
+def test_an_unreadable_custom_start_mints_nothing(bot):
+    b, store, tg = bot
+    run(b._handle(tap(ALLOWED, "c:p1")))
+    run(b._handle(msg(ALLOWED, "sometime next week")))
+    assert store.list_grants() == []
+    # And the prompt is spent, so the next stray message is an ordinary one.
+    run(b._handle(msg(ALLOWED, "90m")))
+    assert store.list_grants() == []
+
+
 def test_new_can_start_later(bot):
     """Minting from a phone is the path used at the gate, so the later start
     the panel offers has to exist here too -- otherwise a scheduled code can

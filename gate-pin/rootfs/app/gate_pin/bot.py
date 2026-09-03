@@ -29,6 +29,15 @@ from .store import Store
 
 log = logging.getLogger("gate_pin.bot")
 
+# The same choices the panel's Starts control offers, so the two paths do not
+# disagree about what "later" means. "Now" is absent by design: this list is
+# only ever reached by pressing the clock, which already said later.
+START_CHOICES = (("In 1 hour", 3600), ("In 8 hours", 28800), ("Tomorrow", 86400))
+
+# How long a "reply with a duration" prompt stays armed. Past this the reply is
+# an ordinary message again, so a forgotten prompt cannot swallow one later.
+CUSTOM_START_TTL = 300
+
 HELP = """<b>Gate PIN</b>
 
 <code>/menu</code> — <b>buttons for your presets</b>, one tap to mint
@@ -67,6 +76,10 @@ class TelegramBot:
         self._status = status if status is not None else {}
         self._on_error = on_error
         self._client: Optional[httpx.AsyncClient] = None
+        # chat_id -> (preset_id, deadline). In memory only: a restart drops the
+        # prompt, which is the safe direction -- the reply then falls through to
+        # "unknown command" rather than minting something nobody is expecting.
+        self._awaiting: dict[int, tuple[str, int]] = {}
         self._status.update(
             {"configured": bool(token and self._chats), "running": False,
              "last_ok": None, "last_error": None}
@@ -238,6 +251,23 @@ class TelegramBot:
     # ---- commands -------------------------------------------------------
 
     async def _command(self, chat_id: int, text: str) -> None:
+        # A pending "reply with a duration" claims the next message -- but only
+        # a message that is not itself a command, so /menu is never swallowed.
+        pending = self._awaiting.get(chat_id)
+        if pending and not text.startswith("/"):
+            preset_id, deadline = pending
+            del self._awaiting[chat_id]
+            if now() > deadline:
+                await self.send(chat_id, "That took a while — tap ⏱ again. /menu")
+                return
+            try:
+                starts_in = parse_duration(text)
+            except DurationError as exc:
+                await self.send(chat_id, f"{html.escape(str(exc))} Tap ⏱ again. /menu")
+                return
+            await self._mint_preset(chat_id, preset_id, starts_in=starts_in)
+            return
+
         parts = text.split()
         cmd = parts[0].lower().split("@")[0]
         args = parts[1:]
@@ -264,7 +294,8 @@ class TelegramBot:
     async def _menu(self, chat_id: int) -> None:
         """The main screen: one button per preset, because a preset is exactly
         'the thing I mint often'. Typing entity ids one-handed at a gate is the
-        interface this replaces."""
+        interface this replaces -- so the preset button still mints in one tap,
+        and the clock beside it is the way to ask for later."""
         presets = await asyncio.to_thread(self._store.list_presets)
         if not presets:
             await self.send(
@@ -276,25 +307,24 @@ class TelegramBot:
             )
             return
 
-        rows, row = [], []
-        for pre in presets[:12]:
-            row.append(
+        # One preset per row now, because the row carries a second button.
+        rows = [
+            [
                 (
                     f"{pre['name']} · {humanise(pre['duration_s'])} · {_kinds(pre['kinds'])}",
                     f"m:{pre['id']}",
-                )
-            )
-            if len(row) == 2:
-                rows.append(row); row = []
-        if row:
-            rows.append(row)
+                ),
+                ("⏱", f"w:{pre['id']}"),
+            ]
+            for pre in presets[:12]
+        ]
         rows.append([("Live grants", "list")])
 
         live = await asyncio.to_thread(self._store.live_pin_grant_count)
         await self.send(
             chat_id,
             f"<b>Mint a code</b>\nLive PIN grants: {live}/{self._cap}\n"
-            f"<i>A tap mints now — for later, /new &lt;preset&gt; --in 3h</i>",
+            f"<i>A tap mints now. ⏱ starts it later.</i>",
             buttons=rows,
         )
 
@@ -304,22 +334,45 @@ class TelegramBot:
         action, _, arg = data.partition(":")
 
         if action == "m":
-            preset = next(
-                (p for p in await asyncio.to_thread(self._store.list_presets) if p["id"] == arg),
-                None,
-            )
+            await self._answer_callback(cid, "Minting...")
+            await self._mint_preset(chat_id, arg)
+
+        elif action == "w":
+            # The clock. Asking before minting rather than after, because a
+            # grant that already exists cannot be moved -- only revoked.
+            preset = await self._preset(arg)
             if not preset:
                 await self._answer_callback(cid, "That preset is gone")
                 return
-            await self._answer_callback(cid, "Minting...")
-            await self._mint_and_reply(
+            await self._answer_callback(cid)
+            rows = [[(name, f"s:{arg}:{secs}")] for name, secs in START_CHOICES]
+            rows.append([("Custom…", f"c:{arg}"), ("Back", "menu")])
+            await self.send(
                 chat_id,
-                label=preset["name"],
-                entities=preset["entities"],
-                duration=preset["duration_s"],
-                theme=preset["theme"],
-                kinds=preset["kinds"],
+                f"<b>{html.escape(preset['name'])}</b> · when should it start?",
+                buttons=rows,
             )
+
+        elif action == "s":
+            preset_id, _, secs = arg.partition(":")
+            await self._answer_callback(cid, "Minting...")
+            await self._mint_preset(chat_id, preset_id, starts_in=int(secs or 0))
+
+        elif action == "c":
+            if not await self._preset(arg):
+                await self._answer_callback(cid, "That preset is gone")
+                return
+            self._awaiting[chat_id] = (arg, now() + CUSTOM_START_TTL)
+            await self._answer_callback(cid)
+            await self.send(
+                chat_id,
+                "Reply with how long to wait, e.g. <code>90m</code>, "
+                "<code>3h</code> or <code>2d</code>.",
+            )
+
+        elif action == "menu":
+            await self._answer_callback(cid)
+            await self._menu(chat_id)
 
         elif action == "list":
             await self._answer_callback(cid)
@@ -383,6 +436,28 @@ class TelegramBot:
 
         else:
             await self._answer_callback(cid)
+
+    async def _preset(self, preset_id: str):
+        presets = await asyncio.to_thread(self._store.list_presets)
+        return next((p for p in presets if p["id"] == preset_id), None)
+
+    async def _mint_preset(self, chat_id: int, preset_id: str, *, starts_in: int = 0) -> None:
+        """Every path that mints a preset -- the button, the clock, and the
+        custom reply -- goes through here, so they cannot disagree about which
+        of the preset's fields are honoured."""
+        preset = await self._preset(preset_id)
+        if not preset:
+            await self.send(chat_id, "That preset is gone.")
+            return
+        await self._mint_and_reply(
+            chat_id,
+            label=preset["name"],
+            entities=preset["entities"],
+            duration=preset["duration_s"],
+            theme=preset["theme"],
+            kinds=preset["kinds"],
+            starts_in=starts_in,
+        )
 
     async def _mint_and_reply(
         self, chat_id, *, label, entities, duration, theme, kinds, starts_in=0

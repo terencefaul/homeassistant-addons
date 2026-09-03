@@ -182,6 +182,12 @@ mints, and the button says what it will produce. Typing entity ids one-handed at
 a gate is the interface this replaces, so **create your presets first** in the
 panel; the menu is built from them.
 
+Beside each preset is a **⏱** button, for a code that should start later. It
+offers *In 1 hour*, *In 8 hours*, *Tomorrow* and *Custom…* — the same choices as
+the panel's Starts control. Custom asks you to reply with a duration (`90m`,
+`3h`, `2d`). The question is asked **before** minting, because a grant that
+already exists cannot be moved, only revoked.
+
 The reply carries **+1 hour** and **Revoke** buttons for that grant. `/list`
 gives **New link**, **New PIN** and **Revoke** per live grant, so you can
 re-send a credential from your phone without opening the panel.
