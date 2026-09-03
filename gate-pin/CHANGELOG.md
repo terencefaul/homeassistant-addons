@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.12.0] - 2026-09-03
+- Order presets and live grants with up/down buttons
+
 ## [0.11.0] - 2026-09-03
 - Telegram menu asks when a preset should start
 
