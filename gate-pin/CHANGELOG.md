@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.11.0] - 2026-09-03
+- Telegram menu asks when a preset should start
+
 ## [0.10.0] - 2026-09-03
 - Expired and cancelled codes explain themselves; Telegram can mint with a later start
 
