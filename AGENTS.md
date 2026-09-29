@@ -32,6 +32,13 @@ Per-add-on tooling stays inside the add-on: `gate-pin/tests/`,
 `gate-pin/scripts/smoke.sh` and `gate-pin/scripts/stub-supervisor.py` all test
 that add-on specifically and are excluded from its image by `.dockerignore`.
 
+A top-level folder **without** a `config.yaml` is not an add-on -- it is a
+Home Assistant *integration* (`custom_components/<domain>/`) or other repo
+tooling. Integrations have no Docker build context, are invisible to
+`scripts/` and the add-on CI job (both glob for `config.yaml`), and carry
+their own CI workflow, release script and `_build_plan/`. See
+`whatsapp-waha-integration/` below.
+
 ## Add-ons
 
 ### gate-pin
@@ -55,6 +62,24 @@ Constraints in that plan which are easy to erode and must not be:
   reach application code.
 - `/api/admin/*` is unreachable on the public port, by nginx configuration
   rather than an application check.
+
+## Integrations
+
+### whatsapp-waha-integration
+
+A Home Assistant custom integration (`custom_components/whatsapp_waha/`)
+connecting to a self-hosted WAHA (WhatsApp HTTP API) server. Not an add-on:
+no `config.yaml`, no Docker build context, its own CI workflow and release
+script (see `docs/plans/whatsapp-waha-integration.md`, "Repo layout").
+
+- `docs/plans/whatsapp-waha-integration.md` -- the engineering plan.
+  **Durable.** Carries the decisions table, the scaffold defect list, the
+  webhook self-registration and send-queue designs, and the risks knowingly
+  accepted.
+- `whatsapp-waha-integration/_build_plan/` -- PRD and milestone prompts for
+  this integration specifically. Same temporary/not-functional rules as the
+  repo-root `_build_plan/` below, scoped to this folder only. Delete once
+  both milestones are built and verified against a linked WAHA session.
 
 ## `_build_plan/`
 
