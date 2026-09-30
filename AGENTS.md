@@ -34,10 +34,14 @@ that add-on specifically and are excluded from its image by `.dockerignore`.
 
 A top-level folder **without** a `config.yaml` is not an add-on -- it is a
 Home Assistant *integration* (`custom_components/<domain>/`) or other repo
-tooling. Integrations have no Docker build context, are invisible to
-`scripts/` and the add-on CI job (both glob for `config.yaml`), and carry
-their own CI workflow, release script and `_build_plan/`. See
-`whatsapp-waha-integration/` below.
+tooling. Integrations have no Docker build context and are invisible to
+`scripts/` and the add-on CI job (both glob for `config.yaml`).
+
+Unlike an add-on, an integration meant for HACS distribution does **not**
+live in this repo as a folder: HACS requires `custom_components/<domain>/`
+at the installed repo's root, which a monorepo subfolder can't satisfy
+without a synthetic mirror. Such integrations get their own repo instead.
+See `whatsapp-waha-integration` below for the one built so far.
 
 ## Add-ons
 
@@ -68,18 +72,17 @@ Constraints in that plan which are easy to erode and must not be:
 ### whatsapp-waha-integration
 
 A Home Assistant custom integration (`custom_components/whatsapp_waha/`)
-connecting to a self-hosted WAHA (WhatsApp HTTP API) server. Not an add-on:
-no `config.yaml`, no Docker build context, its own CI workflow and release
-script (see `docs/plans/whatsapp-waha-integration.md`, "Repo layout").
+connecting to a self-hosted WAHA (WhatsApp HTTP API) server. Milestones 1
+and 2 (connect/link/receive, send/pace/notify) were built here, then moved
+out to its own repo, https://github.com/terencefaul/whatsapp-waha-integration,
+so it can be installed via HACS -- see that repo for the code, tests,
+`_build_plan/`, and its own copy of the engineering plan.
 
-- `docs/plans/whatsapp-waha-integration.md` -- the engineering plan.
-  **Durable.** Carries the decisions table, the scaffold defect list, the
-  webhook self-registration and send-queue designs, and the risks knowingly
-  accepted.
-- `whatsapp-waha-integration/_build_plan/` -- PRD and milestone prompts for
-  this integration specifically. Same temporary/not-functional rules as the
-  repo-root `_build_plan/` below, scoped to this folder only. Delete once
-  both milestones are built and verified against a linked WAHA session.
+- `docs/plans/whatsapp-waha-integration.md` -- kept here as the historical
+  record of the design decisions made while it was still developed in this
+  monorepo (the scaffold defect list, webhook self-registration and
+  send-queue designs, risks knowingly accepted). The live copy moved with
+  the code; this one no longer gets updated.
 
 ## `_build_plan/`
 
